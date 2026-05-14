@@ -1,0 +1,8 @@
+[submodule "dubu-api"]
+	path = dubu-api
+	url = git@github.com:kyh0703/dubu-api.git
+	branch = develop
+[submodule "dubu-web"]
+	path = dubu-web
+	url = git@github.com:kyh0703/dubu-web.git
+	branch = develop
