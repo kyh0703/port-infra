@@ -43,6 +43,7 @@ services:
     ports:
       - "${WEB_PORT:-3000}:3000"
     environment:
+      SITE_URL: ${SITE_URL:-http://localhost:3000}
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001/api/v1}
     volumes:
       - ./dubu-web:/app
