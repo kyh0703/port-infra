@@ -17,8 +17,9 @@ services:
     build:
       context: ./dubu-api
       dockerfile: Dockerfile
-      target: migrator
+      target: deps
     image: dubu-api-migrator:local
+    working_dir: /app
     depends_on:
       redis:
         condition: service_healthy
@@ -28,8 +29,14 @@ services:
       NODE_ENV: production
       DB_PATH: /app/data/dubu.sqlite
       REDIS_URL: redis://redis:6379
+      EMAIL_VERIFICATION_DEV_CODE: "false"
     volumes:
+      - ./dubu-api:/app
+      - api_migrate_node_modules:/app/node_modules
       - ./data:/app/data
+    command: >
+      sh -lc "pnpm install --frozen-lockfile &&
+      pnpm migration:up:prod"
     restart: "no"
 
   api:
@@ -51,6 +58,7 @@ services:
       NODE_ENV: production
       DB_PATH: /app/data/dubu.sqlite
       REDIS_URL: redis://redis:6379
+      EMAIL_VERIFICATION_DEV_CODE: "false"
     volumes:
       - ./data:/app/data
 
@@ -65,8 +73,8 @@ services:
     ports:
       - "${WEB_PORT:-3000}:3000"
     environment:
-      SITE_URL: ${SITE_URL:-http://localhost:3000}
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001/api/v1}
 
 volumes:
   redis_data:
+  api_migrate_node_modules:
