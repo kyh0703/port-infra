@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT:-16379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -13,60 +13,42 @@ services:
       timeout: 3s
       retries: 20
 
-  api-migrate:
-    build:
-      context: ./dubu-api
-      dockerfile: Dockerfile
-      target: migrator
-    image: dubu-api-migrator:local
-    depends_on:
-      redis:
-        condition: service_healthy
-    env_file:
-      - ./.env
-    environment:
-      NODE_ENV: production
-      DB_PATH: /app/data/dubu.sqlite
-      REDIS_URL: redis://redis:6379
-    volumes:
-      - ./data:/app/data
-    restart: "no"
-
   api:
     build:
       context: ./dubu-api
       dockerfile: Dockerfile
-    image: dubu-api:local
-    restart: unless-stopped
+      target: deps
+    image: dubu-exec-api:local
+    working_dir: /app
     depends_on:
       redis:
         condition: service_healthy
-      api-migrate:
-        condition: service_completed_successfully
     ports:
       - "${API_PORT:-3001}:3001"
-    env_file:
-      - ./.env
-    environment:
-      NODE_ENV: production
-      DB_PATH: /app/data/dubu.sqlite
-      REDIS_URL: redis://redis:6379
+    env_file: ./.env
     volumes:
+      - ./dubu-api:/app
+      - api_node_modules:/app/node_modules
       - ./data:/app/data
+    command: >
+      sh -lc "CI=true pnpm install --frozen-lockfile &&
+      pnpm mikro-orm:local migration:up &&
+      pnpm dev:local"
 
   web:
     build:
       context: ./dubu-web
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001/api/v1}
     image: dubu-web:local
-    restart: unless-stopped
     depends_on:
       - api
     ports:
       - "${WEB_PORT:-3000}:3000"
     environment:
-      SITE_URL: ${SITE_URL:-http://localhost:3000}
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001/api/v1}
 
 volumes:
   redis_data:
+  api_node_modules:
