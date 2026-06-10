@@ -1,8 +1,12 @@
-[submodule "dubu-api"]
-	path = dubu-api
-	url = git@github.com:kyh0703/dubu-api.git
+[submodule "port-api"]
+	path = port-api
+	url = git@github.com:kyh0703/port-api.git
 	branch = develop
-[submodule "dubu-web"]
-	path = dubu-web
-	url = git@github.com:kyh0703/dubu-web.git
+[submodule "port-media"]
+	path = port-media
+	url = git@github.com:kyh0703/port-media.git
+	branch = main
+[submodule "port-web"]
+	path = port-web
+	url = git@github.com:kyh0703/port-web.git
 	branch = develop
