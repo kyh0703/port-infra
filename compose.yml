@@ -1,4 +1,39 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-port}
+      POSTGRES_USER: ${POSTGRES_USER:-port}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-port_local_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  pgadmin:
+    image: dpage/pgadmin4:9
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
+    volumes:
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - pgadmin_data:/var/lib/pgadmin
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -21,6 +56,8 @@ services:
     image: port-api:local
     working_dir: /app
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     ports:
@@ -32,6 +69,7 @@ services:
       PORT: 3001
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
       LOG_LEVEL: ${LOG_LEVEL:-debug}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://port:port_local_password@postgres:5432/port}
       DB_PATH: /app/data/overthinker.sqlite
       REDIS_URL: redis://redis:6379
       JWT_ACCESS_TOKEN_SECRET: ${JWT_ACCESS_TOKEN_SECRET:-overthinker_local_access_token_secret_change_me}
@@ -110,6 +148,8 @@ services:
       pnpm dev --hostname 0.0.0.0"
 
 volumes:
+  postgres_data:
+  pgadmin_data:
   redis_data:
   port_api_node_modules:
   port_api_data:
