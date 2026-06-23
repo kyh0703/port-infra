@@ -25,6 +25,12 @@ make app-up    # api, media, web
 make up
 ```
 
+기존 PostgreSQL volume에서 `port` 계정 인증이 실패하면:
+
+```bash
+make db-ensure-user
+```
+
 인프라만 실행:
 
 ```bash
