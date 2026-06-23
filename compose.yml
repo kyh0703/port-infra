@@ -111,6 +111,8 @@ services:
     profiles: ["app"]
     image: port-media:local
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     ports:
@@ -121,8 +123,8 @@ services:
       NODE_ID: ${MEDIA_NODE_ID:-2}
       SERVER_PORT: 8080
       OPENAI_API_KEY: ${OPENAI_API_KEY:-replace-with-openai-api-key}
-      DATABASE_DSN: "file:/app/data/portfolio_media.db?cache=shared"
-      REDIS_ADDR: redis:6379
+      DATABASE_URL: ${MEDIA_DATABASE_URL:-postgresql://port:port_local_password@postgres:5432/port?sslmode=disable}
+      REDIS_URL: redis://redis:6379
       MEDIA_SERVER_URL: ${MEDIA_SERVER_PUBLIC_URL:-http://localhost:8080}
       EVENTS_CONVERSATION_STREAM_NAME: ${EVENTS_CONVERSATION_STREAM_NAME:-media:conversation-events:v1}
     volumes:
