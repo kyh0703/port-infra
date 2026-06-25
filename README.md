@@ -48,6 +48,6 @@ docker compose --profile app up --no-deps api media web
 - API: http://localhost:3001/api/v1/health
 - Media: http://localhost:8080/api/v1/health
 - Web: http://localhost:3000
-- PostgreSQL: localhost:5432
+- PostgreSQL: localhost:15432
 - pgAdmin: http://localhost:5050
 - Redis: localhost:16379
