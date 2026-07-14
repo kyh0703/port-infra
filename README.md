@@ -33,7 +33,7 @@ make db-ensure-user
 인프라만 실행:
 
 ```bash
-docker compose --profile infra up
+docker compose up
 ```
 
 서비스:

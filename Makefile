@@ -10,7 +10,7 @@ INFRA_SERVICES := postgres redis pgadmin
 .PHONY: infra-up infra-down infra-logs db-ensure-user up down ps
 
 infra-up:
-	$(COMPOSE) --profile infra up -d $(INFRA_SERVICES)
+	$(COMPOSE) up -d $(INFRA_SERVICES)
 
 infra-down:
 	$(COMPOSE) stop $(INFRA_SERVICES)
@@ -19,11 +19,11 @@ infra-logs:
 	$(COMPOSE) logs -f $(INFRA_SERVICES)
 
 db-ensure-user:
-	$(COMPOSE) --profile infra up -d postgres
+	$(COMPOSE) up -d postgres
 	$(COMPOSE) exec -T --user postgres postgres sh /docker-entrypoint-initdb.d/01-ensure-port-user.sh
 
 up:
-	$(COMPOSE) --profile infra up -d
+	$(COMPOSE) up -d
 
 down:
 	$(COMPOSE) down
