@@ -16,7 +16,6 @@ git submodule update --init --recursive
 ```bash
 cp .env.example .env
 make infra-up  # postgres, redis, pgadmin
-make app-up    # api, media, web
 ```
 
 전체를 한 번에 띄우려면:
@@ -37,17 +36,8 @@ make db-ensure-user
 docker compose --profile infra up
 ```
 
-인프라가 이미 실행 중일 때 앱만 실행:
-
-```bash
-docker compose --profile app up --no-deps api media web
-```
-
 서비스:
 
-- API: http://localhost:3001/api/v1/health
-- Media: http://localhost:8080/api/v1/health
-- Web: http://localhost:3000
 - PostgreSQL: localhost:15432
 - pgAdmin: http://localhost:5050
 - Redis: localhost:16379
