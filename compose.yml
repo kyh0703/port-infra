@@ -239,7 +239,7 @@ services:
       - "macbookpro:host-gateway"
       - "host.docker.internal:host-gateway"
     volumes:
-      - ${VOICE_AGENT_CONFIG_FILE:-./config/voice-agent.local.yaml}:/app/config/local.yaml:ro
+      - ${VOICE_AGENT_CONFIG_FILE:-./config/voice-agent.local.example.yaml}:/app/config/local.yaml:ro
     ports:
       - "${VOICE_AGENT_METRICS_PORT:-19091}:9091"
     healthcheck:
