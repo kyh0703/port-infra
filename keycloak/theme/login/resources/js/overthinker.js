@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
   link.id = wrapper.id;
   link.className = wrapper.className;
   link.textContent = wrapper.textContent;
-  link.href = "https://macbookpro.tail9f349d.ts.net/";
+  link.href = "http://macbookpro:3000/";
   link.setAttribute("aria-label", "Overthinker 포털로 이동");
   wrapper.replaceWith(link);
 });

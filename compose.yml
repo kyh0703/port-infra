@@ -78,7 +78,7 @@ services:
         condition: service_completed_successfully
     command: ["start-dev", "--import-realm"]
     ports:
-      - "${KEYCLOAK_PORT:-18080}:8080"
+      - "18080:8080"
     environment:
       KC_DB: postgres
       KC_DB_URL_HOST: postgres
@@ -88,7 +88,7 @@ services:
       KC_DB_PASSWORD: ${KEYCLOAK_DATABASE_PASSWORD:-keycloak_local_password}
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
-      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-http://localhost:18080}
+      KC_HOSTNAME: http://macbookpro:18080
       KC_HOSTNAME_STRICT: "true"
       KC_HTTP_ENABLED: "true"
       KC_PROXY_HEADERS: xforwarded
@@ -116,6 +116,169 @@ services:
         limits:
           cpus: ${KEYCLOAK_CPU_LIMIT:-1.0}
           memory: ${KEYCLOAK_MEMORY_LIMIT:-1536M}
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command: ["--dev", "--bind", "0.0.0.0"]
+    restart: unless-stopped
+    ports:
+      - "7880:7880/tcp"
+      - "7881:7881/tcp"
+      - "7882:7882/udp"
+
+  api:
+    image: ghcr.io/kyh0703/port-api:dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      rag:
+        condition: service_started
+      api-migrator:
+        condition: service_completed_successfully
+      livekit:
+        condition: service_started
+    env_file:
+      - ${API_ENV_FILE:-./config/api.env.example}
+    extra_hosts:
+      - "macbookpro:host-gateway"
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${API_PORT:-8000}:8000"
+      - "${API_GRPC_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/api/v1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  postgres-app-init:
+    image: pgvector/pgvector:pg17
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGPASSWORD: ${POSTGRES_PASSWORD:-port_local_password}
+      POSTGRES_USER: ${POSTGRES_USER:-port}
+      POSTGRES_DB: ${POSTGRES_DB:-port}
+    volumes:
+      - ./postgres/init/01-ensure-port-user.sh:/usr/local/bin/ensure-port-user:ro
+    command: ["sh", "/usr/local/bin/ensure-port-user"]
+
+  api-migrator:
+    image: ghcr.io/kyh0703/port-api:migrator
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-app-init:
+        condition: service_completed_successfully
+    env_file:
+      - ${API_ENV_FILE:-./config/api.env.example}
+    extra_hosts:
+      - "macbookpro:host-gateway"
+      - "host.docker.internal:host-gateway"
+
+  web:
+    image: ghcr.io/kyh0703/port-web:dev
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    env_file:
+      - ${WEB_ENV_FILE:-./config/web.env.example}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  rag:
+    image: ghcr.io/kyh0703/port-rag:dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ${RAG_ENV_FILE:-./config/rag.env.example}
+    ports:
+      - "${RAG_PORT:-8001}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  voice-agent:
+    image: ghcr.io/kyh0703/port-voice-agent:dev
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+      livekit:
+        condition: service_started
+      rag:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ${VOICE_AGENT_ENV_FILE:-./config/voice-agent.env.example}
+    extra_hosts:
+      - "macbookpro:host-gateway"
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${VOICE_AGENT_CONFIG_FILE:-./config/voice-agent.local.yaml}:/app/config/local.yaml:ro
+    ports:
+      - "${VOICE_AGENT_METRICS_PORT:-19091}:9091"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9091/metrics').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  aggregator:
+    image: ghcr.io/kyh0703/port-aggregator:dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-app-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    env_file:
+      - ${AGGREGATOR_ENV_FILE:-./config/aggregator.env.example}
+    ports:
+      - "${AGGREGATOR_PORT:-3001}:3000"
+  adaptor:
+    image: ghcr.io/kyh0703/port-adaptor:dev
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    env_file:
+      - ${ADAPTOR_ENV_FILE:-./config/adaptor.env.example}
+    ports:
+      - "3002:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
 
   prometheus:
     image: quay.io/prometheus/prometheus:v3.13.0

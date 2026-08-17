@@ -1,0 +1,9 @@
+# Copy to a local-only file and set provider credentials there.
+worker:
+  AGENT_NAME: voice-agent
+bootstrap:
+  VOICE_RUNTIME_GRPC_ADDR: api:8080
+  RAG_URL: http://rag:8000
+  REDIS_URL: redis://redis:6379
+metrics:
+  METRICS_PORT: 9091
