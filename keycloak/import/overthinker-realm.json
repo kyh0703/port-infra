@@ -1,0 +1,114 @@
+{
+  "realm": "overthinker",
+  "displayName": "Overthinker",
+  "enabled": true,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["ko", "en"],
+  "defaultLocale": "ko",
+  "loginTheme": "overthinker",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 604800,
+  "ssoSessionMaxLifespan": 604800,
+  "roles": {
+    "client": {
+      "overthinker-api": [
+        {
+          "name": "user",
+          "description": "Standard application access",
+          "clientRole": true
+        },
+        {
+          "name": "admin",
+          "description": "Application administrator access",
+          "clientRole": true
+        }
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "overthinker-api",
+      "name": "Overthinker API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "overthinker-api-bff",
+      "name": "Overthinker API BFF",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "clientAuthenticatorType": "client-secret",
+      "secret": "overthinker-local-bff-secret",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "rootUrl": "https://macbookpro.tail9f349d.ts.net",
+      "baseUrl": "/",
+      "adminUrl": "https://macbookpro.tail9f349d.ts.net",
+      "redirectUris": [
+        "https://macbookpro.tail9f349d.ts.net/api/v1/auth/callback"
+      ],
+      "webOrigins": [
+        "https://macbookpro.tail9f349d.ts.net"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "https://macbookpro.tail9f349d.ts.net/*"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "basic",
+        "email"
+      ],
+      "protocolMappers": [
+        {
+          "name": "overthinker-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "overthinker-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin@overthinker.local",
+      "email": "admin@overthinker.local",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "overthinker-api": ["user", "admin"]
+      }
+    }
+  ]
+}
