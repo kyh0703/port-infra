@@ -46,10 +46,18 @@ jq -e '
   and (.clients | any(
     .clientId == "overthinker-api-bff"
     and .secret == "overthinker-local-bff-secret"
+    and .rootUrl == "https://macbookpro.tail9f349d.ts.net"
+    and .adminUrl == "https://macbookpro.tail9f349d.ts.net"
+    and .redirectUris == ["https://macbookpro.tail9f349d.ts.net/api/v1/auth/callback"]
+    and .webOrigins == ["https://macbookpro.tail9f349d.ts.net"]
+    and .attributes."post.logout.redirect.uris" == "https://macbookpro.tail9f349d.ts.net/*"
     and (.protocolMappers | any(.config."included.client.audience" == "overthinker-api"))
   ))
   and (.roles.client."overthinker-api" | map(.name) | sort == ["admin", "user"])
   and (.users | any(.username == "admin@overthinker.local"))
 ' keycloak/import/overthinker-realm.json >/dev/null
+
+grep -Fq 'link.href = "https://macbookpro.tail9f349d.ts.net/";' \
+  keycloak/theme/login/resources/js/overthinker.js
 
 printf 'compose contract: ok\n'
