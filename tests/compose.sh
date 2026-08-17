@@ -152,6 +152,9 @@ jq -e '
 jq -e '
   .realm == "overthinker"
   and .loginTheme == "overthinker"
+  and .internationalizationEnabled == true
+  and .supportedLocales == ["ko"]
+  and .defaultLocale == "ko"
   and (.clients | any(.clientId == "overthinker-api"))
   and (.clients | any(
     .clientId == "overthinker-api-bff"
@@ -166,6 +169,8 @@ jq -e '
   and (.roles.client."overthinker-api" | map(.name) | sort == ["admin", "user"])
   and (.users | any(.username == "admin@overthinker.local"))
 ' keycloak/import/overthinker-realm.json >/dev/null
+
+grep -Fxq 'locales=ko' keycloak/theme/login/theme.properties
 
 grep -Fq 'link.href = "http://macbookpro:3000/";' \
   keycloak/theme/login/resources/js/overthinker.js
