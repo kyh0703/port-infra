@@ -57,17 +57,17 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
-      "rootUrl": "https://macbookpro.tail9f349d.ts.net",
+      "rootUrl": "http://macbookpro:3000",
       "baseUrl": "/",
-      "adminUrl": "https://macbookpro.tail9f349d.ts.net",
+      "adminUrl": "http://macbookpro:3000",
       "redirectUris": [
-        "https://macbookpro.tail9f349d.ts.net/api/v1/auth/callback"
+        "http://macbookpro:3000/api/v1/auth/callback"
       ],
       "webOrigins": [
-        "https://macbookpro.tail9f349d.ts.net"
+        "http://macbookpro:3000"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "https://macbookpro.tail9f349d.ts.net/*"
+        "post.logout.redirect.uris": "http://macbookpro:3000/*"
       },
       "defaultClientScopes": [
         "web-origins",

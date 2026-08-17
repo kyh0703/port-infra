@@ -34,6 +34,13 @@ WHERE NOT EXISTS (
 
 SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'app_user', :'app_password')\gexec
 
+SELECT 'CREATE ROLE aggregator NOLOGIN'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM pg_catalog.pg_roles
+  WHERE rolname = 'aggregator'
+)\gexec
+
 SELECT format('CREATE DATABASE %I OWNER %I', :'app_db', :'app_user')
 WHERE NOT EXISTS (
   SELECT 1

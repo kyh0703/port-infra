@@ -14,3 +14,8 @@ keycloak/import/*
 !keycloak/import/overthinker-realm.json
 
 .DS_Store
+
+config/*.env
+config/*.local.yaml
+!config/*.env.example
+!config/*.local.example.yaml
