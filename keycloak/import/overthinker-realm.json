@@ -10,7 +10,7 @@
   "rememberMe": true,
   "verifyEmail": false,
   "internationalizationEnabled": true,
-  "supportedLocales": ["ko", "en"],
+  "supportedLocales": ["ko"],
   "defaultLocale": "ko",
   "loginTheme": "overthinker",
   "accessTokenLifespan": 300,
