@@ -116,6 +116,7 @@ test -f config/voice-agent.env.example
 test -f config/aggregator.env.example
 test -f config/adaptor.env.example
 test -f config/voice-agent.local.example.yaml
+grep -Fq '${VOICE_AGENT_CONFIG_FILE:-./config/voice-agent.local.example.yaml}' compose.yml
 grep -Fq 'postgres-app-init' compose.yml
 grep -Fq 'aggregator' postgres/init/01-ensure-port-user.sh
 ! grep -Fq 'PLATFORM_HOSTNAME' .env.example
