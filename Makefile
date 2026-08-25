@@ -32,7 +32,7 @@ ifeq ($(strip $(CHANGED_SERVICES)),)
 $(error CHANGED_SERVICES must not be empty)
 endif
 
-.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs tools-up tools-down observability-up observability-down observability-logs db-ensure-user test up down ps
+.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs tools-up tools-down observability-up observability-down observability-logs db-ensure-user tailscale-direct test up down ps
 
 colima-start:
 	colima start --vm-type vz --runtime docker --cpus 4 --memory 6 --disk 60
@@ -106,8 +106,15 @@ db-ensure-user:
 	$(COMPOSE) up -d postgres
 	$(COMPOSE) exec -T --user postgres postgres sh /docker-entrypoint-initdb.d/01-ensure-port-user.sh
 
+tailscale-direct:
+	tailscale serve reset
+	tailscale funnel reset
+	tailscale serve status --json
+	tailscale funnel status --json
+
 test:
 	COMPOSE="$(COMPOSE)" bash tests/compose.sh
+	bash tests/commands.sh
 
 up:
 	$(COMPOSE) up -d

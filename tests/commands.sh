@@ -33,6 +33,44 @@ grep -Fq 'HEALTH_INTERVAL ?= 2' Makefile
 grep -Fq '$(MAKE) health' Makefile
 grep -Fq 'filter-out $(COMPOSE_ALLOWLIST)' Makefile
 grep -Fq 'CHANGED_SERVICES="api web"' README.md
+grep -Fq 'bash tests/commands.sh' Makefile
+
+grep -Fq 'tailscale-direct' Makefile
+grep -Fq 'tailscale serve reset' Makefile
+grep -Fq 'tailscale funnel reset' Makefile
+grep -Fq 'tailscale serve status --json' Makefile
+grep -Fq 'tailscale funnel status --json' Makefile
+if grep -Eq '^(deploy|recreate|health):.*tailscale-direct' Makefile; then
+  echo 'tailscale cleanup must remain explicit' >&2
+  exit 1
+fi
+
+assert_tailscale_command_forms() {
+  local file=$1
+  local line service action
+  while IFS= read -r line; do
+    [[ "$line" =~ tailscale[[:space:]]+(serve|funnel)[[:space:]]+([^[:space:]]+) ]] || continue
+    service=${BASH_REMATCH[1]}
+    action=${BASH_REMATCH[2]}
+    if [[ "$action" != 'reset' && "$action" != 'status' ]]; then
+      echo "tailscale $service activation is forbidden: $line" >&2
+      return 1
+    fi
+  done < "$file"
+}
+
+assert_tailscale_command_forms Makefile
+assert_tailscale_command_forms README.md
+for forbidden in \
+  'tailscale serve localhost:3000' \
+  'tailscale serve http+insecure://localhost:3000' \
+  'tailscale serve unix:/tmp/web.sock' \
+  'tailscale funnel localhost:3000'; do
+  if assert_tailscale_command_forms <(printf '%s\n' "$forbidden"); then
+    echo "forbidden Tailscale activation was accepted: $forbidden" >&2
+    exit 1
+  fi
+done
 
 grep -Fq 'make deploy' README.md
 grep -Fq 'make pull' README.md
@@ -55,6 +93,11 @@ grep -Fq 'tailscale login' README.md
 grep -Fq 'tailscale status' README.md
 grep -Fq 'tailscale ping macbookpro' README.md
 grep -Fq 'ssh user@macbookpro' README.md
+grep -Fq 'make tailscale-direct' README.md
+grep -Fq 'tailscale serve status --json' README.md
+grep -Fq 'tailscale funnel status --json' README.md
+grep -Fq 'http://macbookpro:18080' README.md
+grep -Fq 'redirect_uri=http://macbookpro:3000/api/v1/auth/callback' README.md
 grep -Fq 'tailscale status' README.md
 grep -Fq 'callback URL' README.md
 grep -Fq 'PAT identity integration' README.md
@@ -95,13 +138,4 @@ pull_line=$(printf '%s\n' "$recreate_plan" | sed -n '1p')
 migrate_line=$(printf '%s\n' "$recreate_plan" | sed -n '2p')
 [[ "$pull_line" == *'pull api api-migrator'* ]]
 [[ "$migrate_line" == *'run --rm --no-deps api-migrator'* ]]
-if grep -Fq 'tailscale serve' Makefile; then
-  echo 'tailscale serve must not be present in Makefile' >&2
-  exit 1
-fi
-if grep -Fq 'tailscale serve' README.md; then
-  echo 'tailscale serve must not be present in README.md' >&2
-  exit 1
-fi
-
 printf 'commands contract: ok\n'

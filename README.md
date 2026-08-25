@@ -42,6 +42,22 @@ Compose project name은 `infra`로 고정하므로 worktree가 달라도 같은 
 Tailscale은 host-level client만 사용한다. Tailnet 내부에서는 `http://macbookpro:3000`으로
 직접 접근하며 Serve, Funnel, 서비스별 Tailscale 컨테이너는 사용하지 않는다.
 
+기존 Mac에 Tailscale Serve 또는 Funnel 설정이 남아 있으면 인증 callback host가 달라질 수 있다.
+배포나 일반 health 확인에 자동 연결하지 않은 명시적 cleanup 명령으로 한 번 정리한다.
+
+```bash
+make tailscale-direct
+tailscale serve status --json
+tailscale funnel status --json
+curl -I http://macbookpro:3000/
+```
+
+상태 JSON에 활성 web handler가 없어야 하며, 로그인은 반드시
+`http://macbookpro:3000`에서 시작한다. Authorization URL은 issuer
+`http://macbookpro:18080/realms/overthinker`와
+`redirect_uri=http://macbookpro:3000/api/v1/auth/callback`을 사용해야 한다.
+HTTPS `*.ts.net` Serve 주소나 이전 `port-web` 장비 주소를 사용하지 않는다.
+
 Colima 설정은 Docker 전용 4코어/6GB이며 Kubernetes를 설치하지 않는다.
 
 기본 서비스:
