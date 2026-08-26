@@ -210,6 +210,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      rag-migrator:
+        condition: service_completed_successfully
     env_file:
       - ${RAG_ENV_FILE:-./config/rag.env.example}
     ports:
@@ -220,6 +222,18 @@ services:
       timeout: 5s
       retries: 20
       start_period: 30s
+
+  rag-migrator:
+    image: ghcr.io/kyh0703/port-rag:dev
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-app-init:
+        condition: service_completed_successfully
+    env_file:
+      - ${RAG_ENV_FILE:-./config/rag.env.example}
+    command: ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
 
   voice-agent:
     image: ghcr.io/kyh0703/port-voice-agent:dev

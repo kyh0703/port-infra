@@ -10,7 +10,7 @@ endif
 
 INFRA_SERVICES := postgres redis keycloak
 APP_SERVICES := api web rag voice-agent aggregator adaptor
-PULL_SERVICES := $(APP_SERVICES) api-migrator livekit
+PULL_SERVICES := $(APP_SERVICES) api-migrator rag-migrator livekit
 LOG_SERVICES := $(APP_SERVICES) livekit
 CHANGED_SERVICES ?= api
 API_PORT ?= 8000
@@ -124,5 +124,5 @@ down:
 
 ps:
 	$(COMPOSE) ps
-RECREATE_PULL_SERVICES := $(CHANGED_SERVICES) $(if $(filter api,$(CHANGED_SERVICES)),api-migrator,)
-MIGRATOR_RECREATE := $(if $(filter api,$(CHANGED_SERVICES)),$(COMPOSE) run --rm --no-deps api-migrator,)
+RECREATE_PULL_SERVICES := $(CHANGED_SERVICES) $(if $(filter api,$(CHANGED_SERVICES)),api-migrator,) $(if $(filter rag,$(CHANGED_SERVICES)),rag-migrator,)
+MIGRATOR_RECREATE := $(strip $(if $(filter api,$(CHANGED_SERVICES)),$(COMPOSE) run --rm --no-deps api-migrator$(if $(filter rag,$(CHANGED_SERVICES)), && ,),)$(if $(filter rag,$(CHANGED_SERVICES)),$(COMPOSE) run --rm --no-deps postgres-app-init && $(COMPOSE) run --rm --no-deps rag-migrator,))

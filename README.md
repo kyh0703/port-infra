@@ -35,6 +35,8 @@ make recreate CHANGED_SERVICES="api web"
 ```
 
 `recreate`는 지정한 서비스만 pull/recreate하며 named volume을 건드리지 않는다.
+`rag`를 재생성할 때는 `postgres-app-init`을 먼저 실행한 뒤 동일한 RAG 이미지로 idempotent migration을 실행하고,
+Compose 기동 시에도 `rag-migrator`가 성공적으로 완료된 뒤 RAG가 시작된다.
 운영 중인 서비스 상태는 `make health`, 최근 로그는 `make logs`로 확인한다.
 자동화와 운영 명령에서는 `docker compose down -v`를 사용하지 않는다.
 Compose project name은 `infra`로 고정하므로 worktree가 달라도 같은 stack/volumes를 재사용한다.

@@ -46,6 +46,14 @@ jq -e '
   and (.services."postgres-app-init".volumes | any(.target == "/usr/local/bin/ensure-port-user" and .read_only == true))
   and .services."api-migrator".environment.DATABASE_URL == .services.api.environment.DATABASE_URL
   and .services.rag.depends_on.postgres.condition == "service_healthy"
+  and .services.rag.depends_on."rag-migrator".condition == "service_completed_successfully"
+  and .services."rag-migrator".image == "ghcr.io/kyh0703/port-rag:dev"
+  and .services."rag-migrator".restart == "no"
+  and .services."rag-migrator".depends_on.postgres.condition == "service_healthy"
+  and .services."rag-migrator".depends_on."postgres-app-init".condition == "service_completed_successfully"
+  and (.services."rag-migrator".environment.DATABASE_URL != null and .services."rag-migrator".environment.DATABASE_URL != "")
+  and .services."rag-migrator".environment.DATABASE_URL == .services.rag.environment.DATABASE_URL
+  and .services."rag-migrator".command == ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
   and .services.aggregator.depends_on.postgres.condition == "service_healthy"
   and .services.aggregator.depends_on."postgres-app-init".condition == "service_completed_successfully"
   and .services.aggregator.depends_on.redis.condition == "service_healthy"

@@ -6,7 +6,7 @@ grep -Fq 'COMPOSE_PROJECT_NAME ?= infra' Makefile
 grep -Fq 'export COMPOSE_PROJECT_NAME' Makefile
 grep -Fq 'stack/volumes' README.md
 grep -Fq 'idempotent' README.md
-grep -Fq 'PULL_SERVICES := $(APP_SERVICES) api-migrator livekit' Makefile
+grep -Fq 'PULL_SERVICES := $(APP_SERVICES) api-migrator rag-migrator livekit' Makefile
 grep -Fq 'livekit' Makefile
 grep -Fq '$(COMPOSE) pull $(PULL_SERVICES)' Makefile
 grep -Fq '$(COMPOSE) up -d --no-deps --force-recreate $(CHANGED_SERVICES)' Makefile
@@ -24,6 +24,8 @@ grep -Fq '"web|http://127.0.0.1:$(WEB_PORT)/"' Makefile
 grep -Fq '"rag|http://127.0.0.1:$(RAG_PORT)/healthz"' Makefile
 grep -Fq '"voice-agent|http://127.0.0.1:$(VOICE_AGENT_METRICS_PORT)/metrics"' Makefile
 grep -Fq '$(COMPOSE) run --rm --no-deps api-migrator' Makefile
+grep -Fq '$(COMPOSE) run --rm --no-deps rag-migrator' Makefile
+grep -Fq '$(COMPOSE) run --rm --no-deps postgres-app-init' Makefile
 grep -Fq '"aggregator|http://127.0.0.1:$(AGGREGATOR_PORT)/healthz"' Makefile
 grep -Fq '"adaptor|http://127.0.0.1:$(ADAPTOR_PORT)/healthz"' Makefile
 grep -Fq 'curl -fsS "$${url}"' Makefile
@@ -138,4 +140,14 @@ pull_line=$(printf '%s\n' "$recreate_plan" | sed -n '1p')
 migrate_line=$(printf '%s\n' "$recreate_plan" | sed -n '2p')
 [[ "$pull_line" == *'pull api api-migrator'* ]]
 [[ "$migrate_line" == *'run --rm --no-deps api-migrator'* ]]
+recreate_plan=$(make -n recreate CHANGED_SERVICES=rag)
+pull_line=$(printf '%s\n' "$recreate_plan" | sed -n '1p')
+migrate_line=$(printf '%s\n' "$recreate_plan" | sed -n '2p')
+[[ "$pull_line" == *'pull rag rag-migrator'* ]]
+[[ "$migrate_line" == *'run --rm --no-deps postgres-app-init'*'run --rm --no-deps rag-migrator'* ]]
+recreate_plan=$(make -n recreate CHANGED_SERVICES='api rag')
+pull_line=$(printf '%s\n' "$recreate_plan" | sed -n '1p')
+migrate_line=$(printf '%s\n' "$recreate_plan" | sed -n '2p')
+[[ "$pull_line" == *'pull api rag api-migrator rag-migrator'* ]]
+[[ "$migrate_line" == *'run --rm --no-deps api-migrator'*'run --rm --no-deps postgres-app-init'*'run --rm --no-deps rag-migrator'* ]]
 printf 'commands contract: ok\n'
