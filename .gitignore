@@ -9,10 +9,6 @@
 **/data/
 .worktrees/
 
-keycloak/import/*
-!keycloak/import/.gitkeep
-!keycloak/import/overthinker-realm.json
-
 .DS_Store
 
 config/*.env

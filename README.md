@@ -65,7 +65,7 @@ Colima 설정은 Docker 전용 4코어/6GB이며 Kubernetes를 설치하지 않�
 | 서비스 | 주소 | 용도 |
 | --- | --- | --- |
 | PostgreSQL | `localhost:15432` | API와 RAG 데이터 |
-| Redis | `localhost:6379` | 캐시와 세션 |
+| Redis | `localhost:6379` | 캐시·세션·Redis Streams |
 
 `postgres-app-init`은 기존 volume의 app role과 `aggregator` NOLOGIN role을 idempotent하게
 보정한 뒤 API migration과 Aggregator가 시작되도록 한다. 기존 데이터와 owner는 삭제하지 않는다.
