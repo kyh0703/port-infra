@@ -104,16 +104,13 @@ grep -Fq 'ssh user@macbookpro' README.md
 grep -Fq 'make tailscale-direct' README.md
 grep -Fq 'tailscale serve status --json' README.md
 grep -Fq 'tailscale funnel status --json' README.md
-grep -Fq 'http://macbookpro:18080' README.md
-grep -Fq 'redirect_uri=http://macbookpro:3000/api/v1/auth/callback' README.md
 grep -Fq 'tailscale status' README.md
-grep -Fq 'callback URL' README.md
 grep -Fq 'PAT identity integration' README.md
 grep -Fq 'HTTPS endpoint' README.md
 grep -Fq 'liveness smoke' README.md
 grep -Fq 'host smoke' README.md
 grep -Fq 'LiveKit TCP' README.md
-grep -Fq 'deterministic dev keys' README.md
+grep -Fq 'deterministic dev 계정' README.md
 grep -Fq 'Web→API→RAG→Voice→LiveKit' README.md
 if grep -Fq 'Voice Agent readiness' README.md || grep -Fq '18081' README.md; then
   echo 'obsolete Voice Agent readiness port documentation is present' >&2

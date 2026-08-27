@@ -1,6 +1,6 @@
 # port-infra
 
-로컬 개발에 필요한 상태 저장 서비스, 인증 서비스, 여섯 애플리케이션을 Docker Compose로 실행한다.
+로컬 개발에 필요한 상태 저장 서비스와 애플리케이션을 Docker Compose로 실행한다.
 애플리케이션은 각 저장소가 GHCR에 발행한 `:dev` 이미지를 사용한다.
 
 ## 실행
@@ -44,7 +44,7 @@ Compose project name은 `infra`로 고정하므로 worktree가 달라도 같은 
 Tailscale은 host-level client만 사용한다. Tailnet 내부에서는 `http://macbookpro:3000`으로
 직접 접근하며 Serve, Funnel, 서비스별 Tailscale 컨테이너는 사용하지 않는다.
 
-기존 Mac에 Tailscale Serve 또는 Funnel 설정이 남아 있으면 인증 callback host가 달라질 수 있다.
+기존 Mac에 Tailscale Serve 또는 Funnel 설정이 남아 있으면 접근 host가 달라질 수 있다.
 배포나 일반 health 확인에 자동 연결하지 않은 명시적 cleanup 명령으로 한 번 정리한다.
 
 ```bash
@@ -55,10 +55,8 @@ curl -I http://macbookpro:3000/
 ```
 
 상태 JSON에 활성 web handler가 없어야 하며, 로그인은 반드시
-`http://macbookpro:3000`에서 시작한다. Authorization URL은 issuer
-`http://macbookpro:18080/realms/overthinker`와
-`redirect_uri=http://macbookpro:3000/api/v1/auth/callback`을 사용해야 한다.
-HTTPS `*.ts.net` Serve 주소나 이전 `port-web` 장비 주소를 사용하지 않는다.
+`http://macbookpro:3000`에서 시작한다. HTTPS `*.ts.net` Serve 주소나
+이전 `port-web` 장비 주소를 사용하지 않는다.
 
 Colima 설정은 Docker 전용 4코어/6GB이며 Kubernetes를 설치하지 않는다.
 
@@ -66,32 +64,18 @@ Colima 설정은 Docker 전용 4코어/6GB이며 Kubernetes를 설치하지 않�
 
 | 서비스 | 주소 | 용도 |
 | --- | --- | --- |
-| PostgreSQL | `localhost:15432` | API, RAG, Keycloak 데이터 |
-| Redis | `localhost:6379` | 캐시와 Redis Streams |
-| Keycloak | `http://macbookpro:18080` | `overthinker` realm 인증 |
+| PostgreSQL | `localhost:15432` | API와 RAG 데이터 |
+| Redis | `localhost:6379` | 캐시와 세션 |
 
-Keycloak은 기존 PostgreSQL의 `keycloak` 데이터베이스를 그대로 사용한다. 시작 전
-`keycloak-db-init`이 전용 계정과 데이터베이스를 보장하고 `.env`의 로컬 비밀번호로
-계정을 갱신한다. realm, 사용자, client 데이터는 삭제하지 않는다.
 `postgres-app-init`은 기존 volume의 app role과 `aggregator` NOLOGIN role을 idempotent하게
 보정한 뒤 API migration과 Aggregator가 시작되도록 한다. 기존 데이터와 owner는 삭제하지 않는다.
-
-Keycloak issuer:
-
-```text
-http://macbookpro:18080/realms/overthinker
-```
-
-API 로컬 환경의 `KEYCLOAK_ISSUER_URL`도 이 주소를 사용한다.
 
 새 로컬 DB의 개발 계정:
 
 - 애플리케이션 로그인: `admin@overthinker.local` / `admin`
-- Keycloak 관리 콘솔: `admin` / `admin`
-- API BFF client secret: `overthinker-local-bff-secret`
 
-위 값은 deterministic dev keys인 로컬 bootstrap 전용이다. 실제 환경에서는 반드시 교체하고
-공유·운영 환경에서는 사용하지 않는다.
+위 값은 deterministic dev 계정이다. 실제 환경에서는 반드시 교체하고 공유·운영 환경에서는
+사용하지 않는다. 인증은 API가 관리하는 이메일/비밀번호와 HttpOnly 세션 쿠키를 사용한다.
 
 ## Compose 서비스 포트와 사전 조건
 
@@ -124,10 +108,10 @@ HTTPS endpoint를 제공하는 환경에서만 local env로 opt-in하며, `PUBLI
 
 `make health`는 각 컨테이너의 liveness smoke와 LiveKit TCP 포트 검사를 수행한다. Voice Agent의 metrics endpoint는
 process liveness만 보장하며 LiveKit registration은 logs와 별도 manual smoke로 확인한다.
-Keycloak callback, Web→API, API→RAG 연동도 별도 manual smoke로 확인한다. Aggregator는 distroless
+Native auth, Web→API, API→RAG 연동도 별도 manual smoke로 확인한다. Aggregator는 distroless
 이미지라 컨테이너 healthcheck 대신 host smoke (`3001/healthz`)를 사용한다.
 
-Manual smoke checklist: Keycloak callback → Web→API→RAG→Voice→LiveKit registration 순서로
+Manual smoke checklist: native auth → Web→API→RAG→Voice→LiveKit registration 순서로
 로그인, API 호출, RAG 요청, Voice bootstrap, LiveKit room 접속을 확인한다.
 
 ## Tailscale 접속
@@ -164,7 +148,7 @@ make observability-up
 
 - Prometheus: http://localhost:19090
 - Grafana: http://localhost:13000
-- 기본 scrape 대상: API `api:8000`, RAG `rag:8000`, Voice Agent `voice-agent:9091`, Aggregator `aggregator:3000`, Keycloak
+- 기본 scrape 대상: API `api:8000`, RAG `rag:8000`, Voice Agent `voice-agent:9091`, Aggregator `aggregator:3000`
 
 중지:
 
@@ -173,14 +157,6 @@ make observability-down
 ```
 
 Loki/Promtail은 포함하지 않는다. 애플리케이션 로그는 Compose 컨테이너 stdout에서 확인한다.
-
-## Keycloak realm import와 테마
-
-- 기존 DB가 있으면 DB 상태가 우선이며 별도 import가 필요 없다.
-- 기존 Keycloak DB에서는 realm import 파일을 바꿔도 callback URL이 자동 갱신되지 않는다. `overthinker-api-bff` client의 callback URL을 수동 확인하고 필요하면 client를 재생성한다.
-- 새 DB에 realm을 넣을 때 export JSON을 `keycloak/import/`에 둔다.
-- realm export에는 사용자 정보가 포함될 수 있어 `keycloak/import/*`는 Git에서 제외된다.
-- 현재 Kubernetes에서 사용하던 `overthinker` 로그인 테마는 `keycloak/theme/`에 포함한다.
 
 ## 관리 명령
 

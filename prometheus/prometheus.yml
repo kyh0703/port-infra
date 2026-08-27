@@ -17,8 +17,3 @@ scrape_configs:
   - job_name: aggregator
     static_configs:
       - targets: ["aggregator:3000"]
-
-  - job_name: keycloak
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["keycloak:9000"]
