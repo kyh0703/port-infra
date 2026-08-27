@@ -4,6 +4,12 @@ set -euo pipefail
 grep -Fq 'colima start --vm-type vz --runtime docker' Makefile
 grep -Fq 'COMPOSE_PROJECT_NAME ?= infra' Makefile
 grep -Fq 'export COMPOSE_PROJECT_NAME' Makefile
+grep -Fq 'INFRA_SERVICES := postgres redis' Makefile
+! grep -Eiq 'keycloak|KC_' Makefile
+grep -Fq 'API_BUILD_CONTEXT=../api' .env.example
+grep -Fq 'WEB_BUILD_CONTEXT=../web' .env.example
+grep -Fq 'target: runner' compose.local.yml
+grep -Fq 'target: migrator' compose.local.yml
 grep -Fq 'stack/volumes' README.md
 grep -Fq 'idempotent' README.md
 grep -Fq 'PULL_SERVICES := $(APP_SERVICES) api-migrator rag-migrator livekit' Makefile

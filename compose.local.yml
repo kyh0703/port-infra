@@ -1,0 +1,14 @@
+services:
+  api:
+    build:
+      context: ${API_BUILD_CONTEXT:-../api}
+      target: runner
+
+  api-migrator:
+    build:
+      context: ${API_BUILD_CONTEXT:-../api}
+      target: migrator
+
+  web:
+    build:
+      context: ${WEB_BUILD_CONTEXT:-../web}

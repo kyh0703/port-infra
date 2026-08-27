@@ -8,7 +8,7 @@ include .env
 export
 endif
 
-INFRA_SERVICES := postgres redis keycloak
+INFRA_SERVICES := postgres redis
 APP_SERVICES := api web rag voice-agent aggregator adaptor
 PULL_SERVICES := $(APP_SERVICES) api-migrator rag-migrator livekit
 LOG_SERVICES := $(APP_SERVICES) livekit
