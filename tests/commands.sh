@@ -6,10 +6,9 @@ grep -Fq 'COMPOSE_PROJECT_NAME ?= infra' Makefile
 grep -Fq 'export COMPOSE_PROJECT_NAME' Makefile
 grep -Fq 'INFRA_SERVICES := postgres redis' Makefile
 ! grep -Eiq 'keycloak|KC_' Makefile
-grep -Fq 'API_BUILD_CONTEXT=../api' .env.example
-grep -Fq 'WEB_BUILD_CONTEXT=../web' .env.example
-grep -Fq 'target: runner' compose.local.yml
-grep -Fq 'target: migrator' compose.local.yml
+! grep -Fq 'API_BUILD_CONTEXT' .env.example
+! grep -Fq 'WEB_BUILD_CONTEXT' .env.example
+test ! -e compose.local.yml
 grep -Fq 'stack/volumes' README.md
 grep -Fq 'idempotent' README.md
 grep -Fq 'PULL_SERVICES := $(APP_SERVICES) api-migrator rag-migrator livekit' Makefile

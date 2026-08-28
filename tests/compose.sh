@@ -10,27 +10,7 @@ else
 fi
 
 config="$(${compose_command[@]} --env-file .env.example -f compose.yml --profile observability --profile tools config --format json)"
-git_common_dir=$(git rev-parse --git-common-dir)
-infra_root=$(cd "$(dirname "${git_common_dir}")" && pwd)
-port_root=$(cd "${infra_root}/.." && pwd)
-api_build_context="${port_root}/api"
-web_build_context="${port_root}/web"
-
-test -f compose.local.yml
-test -d "${api_build_context}"
-test -d "${web_build_context}"
-
-local_config="$(
-  API_BUILD_CONTEXT="${api_build_context}" \
-  WEB_BUILD_CONTEXT="${web_build_context}" \
-  "${compose_command[@]}" \
-    --env-file .env.example \
-    -f compose.yml \
-    -f compose.local.yml \
-    --profile observability \
-    --profile tools \
-    config --format json
-)"
+test ! -e compose.local.yml
 
 jq -e '
   . as $root |
@@ -120,16 +100,6 @@ jq -e '
   and (.services.web.ports | any(.published == "3000" and .target == 3000))
   and (.services.adaptor.ports | any(.published == "3002" and .target == 3000))
 ' >/dev/null <<<"${config}"
-
-jq -e '
-  .services.api.build.context == $api
-  and .services.api.build.target == "runner"
-  and .services.api.environment.NODE_ENV == "local"
-  and .services.api.environment.AUTH_EMAIL_VERIFICATION_EXPOSE_DEBUG_CODE == "true"
-  and .services."api-migrator".build.context == $api
-  and .services."api-migrator".build.target == "migrator"
-  and .services.web.build.context == $web
-' --arg api "${api_build_context}" --arg web "${web_build_context}" >/dev/null <<<"${local_config}"
 
 jq -e '
   (.services.api.extra_hosts | any(. == "macbookpro=host-gateway"))
