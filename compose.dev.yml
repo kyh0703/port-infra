@@ -1,0 +1,26 @@
+services:
+  api:
+    build:
+      context: ../api
+      target: deps
+    command: ["pnpm", "dev"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ../api:/app
+      - api_node_modules:/app/node_modules
+
+  web:
+    build:
+      context: ../web
+      target: deps
+    command: ["pnpm", "dev"]
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ../web:/app
+      - web_node_modules:/app/node_modules
+
+volumes:
+  api_node_modules:
+  web_node_modules:

@@ -41,6 +41,22 @@ Compose 기동 시에도 `rag-migrator`가 성공적으로 완료된 뒤 RAG가 
 자동화와 운영 명령에서는 `docker compose down -v`를 사용하지 않는다.
 Compose project name은 `infra`로 고정하므로 worktree가 달라도 같은 stack/volumes를 재사용한다.
 
+## 소스 마운트 개발 모드
+
+API와 Web을 로컬 소스로 실행하고 파일 변경 시 watch/hot reload를 사용하려면 다음 명령을 실행한다.
+`compose.dev.yml`은 기본 `compose.yml`을 덮어쓰며, sibling 저장소의 `../api`와 `../web`을
+각 컨테이너 `/app`에 마운트하고 Dockerfile의 `deps` stage에서 의존성을 준비한다.
+
+```bash
+make dev-up
+make dev-logs
+make dev-stop
+```
+
+`dev-stop`은 컨테이너만 중지하며 PostgreSQL·Redis 등 named volume은 삭제하지 않는다.
+개발 모드는 infra 저장소 루트에서 실행해야 하며, API는 `NODE_ENV=development`로,
+Web은 `pnpm dev`로 실행된다. 기본 이미지 기반 실행으로 돌아가려면 `make up`을 사용한다.
+
 Tailscale은 host-level client만 사용한다. Tailnet 내부에서는 `http://macbookpro:3000`으로
 직접 접근하며 Serve, Funnel, 서비스별 Tailscale 컨테이너는 사용하지 않는다.
 

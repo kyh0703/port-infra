@@ -11,6 +11,7 @@ fi
 
 config="$(${compose_command[@]} --env-file .env.example -f compose.yml --profile observability --profile tools config --format json)"
 test ! -e compose.local.yml
+dev_config="$(${compose_command[@]} --env-file .env.example -f compose.yml -f compose.dev.yml config --format json)"
 
 jq -e '
   . as $root |
@@ -148,3 +149,24 @@ grep -Fq 'grafana_data:' compose.yml
 ! grep -Eiq '^(MAIL_HOST|MAIL_USER|MAIL_PASS)=[^[:space:]]+' config/api.env.example
 
 printf 'compose contract: ok\n'
+
+jq -e '
+  (.services.api.build.context | endswith("/api"))
+  and .services.api.build.target == "deps"
+  and .services.api.command == ["pnpm", "dev"]
+  and .services.api.environment.NODE_ENV == "development"
+  and (.services.api.volumes | any(.target == "/app"))
+  and (.services.web.build.context | endswith("/web"))
+  and .services.web.build.target == "deps"
+  and .services.web.command == ["pnpm", "dev"]
+  and .services.web.environment.NODE_ENV == "development"
+  and (.services.web.volumes | any(.target == "/app"))
+  and (.services.postgres.volumes | any(.target == "/var/lib/postgresql/data"))
+  and (.services.redis.volumes | any(.target == "/data"))
+' >/dev/null <<<"${dev_config}"
+
+jq -e '
+  ([.services.api.volumes[]?.target, .services.web.volumes[]?.target] | all(. != "/var/lib/postgresql/data" and . != "/data"))
+' >/dev/null <<<"${dev_config}"
+
+printf 'compose dev contract: ok\n'

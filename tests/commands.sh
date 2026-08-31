@@ -9,6 +9,10 @@ grep -Fq 'INFRA_SERVICES := postgres redis' Makefile
 ! grep -Fq 'API_BUILD_CONTEXT' .env.example
 ! grep -Fq 'WEB_BUILD_CONTEXT' .env.example
 test ! -e compose.local.yml
+grep -Fq 'compose.dev.yml' Makefile
+grep -Fq 'dev-up:' Makefile
+grep -Fq 'dev-logs:' Makefile
+grep -Fq 'dev-stop:' Makefile
 grep -Fq 'stack/volumes' README.md
 grep -Fq 'idempotent' README.md
 grep -Fq 'PULL_SERVICES := $(APP_SERVICES) api-migrator rag-migrator livekit' Makefile

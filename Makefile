@@ -1,4 +1,5 @@
 COMPOSE ?= $(shell docker compose version >/dev/null 2>&1 && printf 'docker compose' || printf 'docker-compose')
+DEV_COMPOSE := $(COMPOSE) -f compose.yml -f compose.dev.yml
 COMPOSE_PROJECT_NAME ?= infra
 override COMPOSE_PROJECT_NAME := infra
 export COMPOSE_PROJECT_NAME
@@ -32,7 +33,7 @@ ifeq ($(strip $(CHANGED_SERVICES)),)
 $(error CHANGED_SERVICES must not be empty)
 endif
 
-.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs tools-up tools-down observability-up observability-down observability-logs db-ensure-user tailscale-direct test up down ps
+.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs tools-up tools-down observability-up observability-down observability-logs db-ensure-user tailscale-direct dev-up dev-logs dev-stop test up down ps
 
 colima-start:
 	colima start --vm-type vz --runtime docker --cpus 4 --memory 6 --disk 60
@@ -77,6 +78,15 @@ health:
 
 logs:
 	$(COMPOSE) logs --tail=100 $(LOG_SERVICES)
+
+dev-up:
+	$(DEV_COMPOSE) up -d
+
+dev-logs:
+	$(DEV_COMPOSE) logs -f api web
+
+dev-stop:
+	$(DEV_COMPOSE) stop
 
 infra-up:
 	$(COMPOSE) up -d $(INFRA_SERVICES)
