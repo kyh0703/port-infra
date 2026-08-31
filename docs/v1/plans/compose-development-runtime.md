@@ -69,6 +69,25 @@
   - git diff --check
 - Parallel-safe: no
 
+### Task T3
+
+- [x] Complete
+- Goal: Isolate Next.js dev build output from the host bind mount so production and development caches cannot conflict.
+- Depends on:
+  - T2
+- Write Scope:
+  - compose.dev.yml
+  - tests/compose.sh
+- Read Context:
+  - ../web/next.config.ts
+  - docs/v1/designs/2026-08-31-v1-compose-development-runtime.md
+- Checks:
+  - make test
+  - docker compose -f compose.yml -f compose.dev.yml config --quiet
+  - manual: Web uses a named `/app/.next` volume and remains healthy without restart churn
+  - git diff --check
+- Parallel-safe: no
+
 ## Notes
 
 - Do not add dynamic build-context variables or modify sibling application repositories.
