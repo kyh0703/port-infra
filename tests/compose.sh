@@ -73,7 +73,9 @@ jq -e '
   and .services.api.environment.WEB_ORIGIN == "http://macbookpro:3000"
   and .services.api.environment.LIVEKIT_URL == "ws://macbookpro:7880"
   and .services.api.environment.LIVEKIT_API_SECRET == "secret"
-  and .services.api.environment.AUTH_EMAIL_VERIFICATION_EXPOSE_DEBUG_CODE == "false"
+  and .services.api.environment.NODE_ENV == "local"
+  and .services.api.environment.AUTH_EMAIL_VERIFICATION_EXPOSE_DEBUG_CODE == "true"
+  and (["MAIL_HOST", "MAIL_USER", "MAIL_PASS"] | all(.[]; ($root.services.api.environment[.] // "") == ""))
   and .services."voice-agent".environment.LIVEKIT_URL == "ws://macbookpro:7880"
   and .services."voice-agent".environment.LIVEKIT_API_SECRET == "secret"
   and .services."voice-agent".environment.LIVEKIT_URL != null
@@ -143,5 +145,6 @@ grep -Fq 'redis_data:' compose.yml
 grep -Fq 'prometheus_data:' compose.yml
 grep -Fq 'grafana_data:' compose.yml
 ! grep -Eiq 'keycloak|KC_' compose.yml .env.example config/api.env.example Makefile
+! grep -Eiq '^(MAIL_HOST|MAIL_USER|MAIL_PASS)=[^[:space:]]+' config/api.env.example
 
 printf 'compose contract: ok\n'

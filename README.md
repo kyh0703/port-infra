@@ -111,6 +111,13 @@ process liveness만 보장하며 LiveKit registration은 logs와 별도 manual s
 Native auth, Web→API, API→RAG 연동도 별도 manual smoke로 확인한다. Aggregator는 distroless
 이미지라 컨테이너 healthcheck 대신 host smoke (`3001/healthz`)를 사용한다.
 
+로컬 Compose의 API는 `NODE_ENV=local`과
+`AUTH_EMAIL_VERIFICATION_EXPOSE_DEBUG_CODE=true`를 사용한다. SMTP가 설정되지 않은 로컬에서
+회원가입 이메일 인증 코드를 응답으로 반환하고 Web이 자동 입력할 수 있도록 하는 개발 전용 설정이다.
+실제 환경에서는 SMTP를 설정하고 이 옵션을 반드시 `false`로 유지해야 하며,
+인증 코드를 응답이나 로그로 노출하면 안 된다. `MAIL_HOST`, `MAIL_USER`, `MAIL_PASS`는
+이 로컬 설정에 넣지 않는다.
+
 Manual smoke checklist: native auth → Web→API→RAG→Voice→LiveKit registration 순서로
 로그인, API 호출, RAG 요청, Voice bootstrap, LiveKit room 접속을 확인한다.
 
