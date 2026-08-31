@@ -68,13 +68,13 @@ jq -e '
 
 jq -e '
   . as $root |
-  (["DATABASE_URL", "REDIS_URL", "RAG_URL", "RAG_RETRIEVAL_CAPABILITY_SECRET", "WEB_ORIGIN", "AUTH_PASSWORD_RESET_SECRET", "AUTH_EMAIL_VERIFICATION_SECRET", "AUTH_EMAIL_VERIFICATION_EXPOSE_DEBUG_CODE", "AUTH_RATE_LIMIT_SECRET", "USER_EMAIL_LOOKUP_KEY", "WEB_CHAT_RESUME_TOKEN_SECRET", "AUTH_SESSION_COOKIE_SECURE", "AUTH_SESSION_TTL_SECONDS", "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY", "USER_PII_ENCRYPTION_KEY"] | all(.[]; $root.services.api.environment[.] != null))
+  (["DATABASE_URL", "REDIS_URL", "RAG_URL", "RAG_RETRIEVAL_CAPABILITY_SECRET", "WEB_ORIGIN", "AUTH_PASSWORD_RESET_SECRET", "AUTH_EMAIL_VERIFICATION_SECRET", "AUTH_RATE_LIMIT_SECRET", "USER_EMAIL_LOOKUP_KEY", "WEB_CHAT_RESUME_TOKEN_SECRET", "AUTH_SESSION_COOKIE_SECURE", "AUTH_SESSION_TTL_SECONDS", "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY", "USER_PII_ENCRYPTION_KEY"] | all(.[]; $root.services.api.environment[.] != null))
   and ([.services.api.environment | keys[] | select(test("KEYCLOAK|KC_"))] | length == 0)
   and .services.api.environment.WEB_ORIGIN == "http://macbookpro:3000"
   and .services.api.environment.LIVEKIT_URL == "ws://macbookpro:7880"
   and .services.api.environment.LIVEKIT_API_SECRET == "secret"
   and .services.api.environment.NODE_ENV == "local"
-  and .services.api.environment.AUTH_EMAIL_VERIFICATION_EXPOSE_DEBUG_CODE == "true"
+  and (.services.api.environment | has("AUTH_EMAIL_VERIFICATION_EXPOSE_DEBUG_CODE") | not)
   and (["MAIL_HOST", "MAIL_USER", "MAIL_PASS"] | all(.[]; ($root.services.api.environment[.] // "") == ""))
   and .services."voice-agent".environment.LIVEKIT_URL == "ws://macbookpro:7880"
   and .services."voice-agent".environment.LIVEKIT_API_SECRET == "secret"
