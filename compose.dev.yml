@@ -4,7 +4,7 @@ services:
     build:
       context: ../api
       target: deps
-    command: ["sh", "-lc", "pnpm install --frozen-lockfile && exec pnpm dev"]
+    command: ["sh", "-lc", "pnpm install --store-dir /pnpm/store --frozen-lockfile && exec pnpm dev"]
     environment:
       NODE_ENV: development
       CI: "true"
@@ -12,13 +12,14 @@ services:
     volumes:
       - ../api:/app
       - api_node_modules:/app/node_modules
+      - api_pnpm_store:/pnpm/store
 
   web:
     image: port-web-dev-runtime:local
     build:
       context: ../web
       target: deps
-    command: ["sh", "-lc", "pnpm install --frozen-lockfile && exec pnpm dev"]
+    command: ["sh", "-lc", "pnpm install --store-dir /pnpm/store --frozen-lockfile && exec pnpm dev"]
     environment:
       NODE_ENV: development
       CI: "true"
@@ -28,7 +29,10 @@ services:
     volumes:
       - ../web:/app
       - web_node_modules:/app/node_modules
+      - web_pnpm_store:/pnpm/store
 
 volumes:
   api_node_modules:
   web_node_modules:
+  api_pnpm_store:
+  web_pnpm_store:

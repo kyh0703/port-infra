@@ -154,16 +154,17 @@ jq -e '
   .services.api.image == "port-api-dev-runtime:local"
   and (.services.api.build.context | endswith("/api"))
   and .services.api.build.target == "deps"
-  and .services.api.command == ["sh", "-lc", "pnpm install --frozen-lockfile && exec pnpm dev"]
+  and .services.api.command == ["sh", "-lc", "pnpm install --store-dir /pnpm/store --frozen-lockfile && exec pnpm dev"]
   and .services.api.environment.NODE_ENV == "development"
   and .services.api.environment.CI == "true"
   and .services.api.environment.CHOKIDAR_USEPOLLING == "true"
   and (.services.api.volumes | any(.target == "/app"))
   and (.services.api.volumes | any(.target == "/app/node_modules" and .type == "volume"))
+  and (.services.api.volumes | any(.target == "/pnpm/store" and .type == "volume" and .source == "api_pnpm_store"))
   and .services.web.image == "port-web-dev-runtime:local"
   and (.services.web.build.context | endswith("/web"))
   and .services.web.build.target == "deps"
-  and .services.web.command == ["sh", "-lc", "pnpm install --frozen-lockfile && exec pnpm dev"]
+  and .services.web.command == ["sh", "-lc", "pnpm install --store-dir /pnpm/store --frozen-lockfile && exec pnpm dev"]
   and .services.web.environment.NODE_ENV == "development"
   and .services.web.environment.CI == "true"
   and .services.web.environment.HOSTNAME == "0.0.0.0"
@@ -171,12 +172,22 @@ jq -e '
   and .services.web.environment.WATCHPACK_POLLING == "true"
   and (.services.web.volumes | any(.target == "/app"))
   and (.services.web.volumes | any(.target == "/app/node_modules" and .type == "volume"))
+  and (.services.web.volumes | any(.target == "/pnpm/store" and .type == "volume" and .source == "web_pnpm_store"))
   and (.services.postgres.volumes | any(.target == "/var/lib/postgresql/data"))
   and (.services.redis.volumes | any(.target == "/data"))
+  and (.volumes.api_pnpm_store != null)
+  and (.volumes.web_pnpm_store != null)
 ' >/dev/null <<<"${dev_config}"
 
 jq -e '
   ([.services.api.volumes[]?.target, .services.web.volumes[]?.target] | all(. != "/var/lib/postgresql/data" and . != "/data"))
+' >/dev/null <<<"${dev_config}"
+
+jq -e '
+  . as $root |
+  ($root.services.api.volumes | map(select(.target == "/pnpm/store") | .source) | . == ["api_pnpm_store"])
+  and ($root.services.web.volumes | map(select(.target == "/pnpm/store") | .source) | . == ["web_pnpm_store"])
+  and (($root.services.api.volumes | map(select(.target == "/pnpm/store") | .source)) != ($root.services.web.volumes | map(select(.target == "/pnpm/store") | .source)))
 ' >/dev/null <<<"${dev_config}"
 
 printf 'compose dev contract: ok\n'
