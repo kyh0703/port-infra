@@ -171,6 +171,7 @@ jq -e '
   and .services.web.environment.CHOKIDAR_USEPOLLING == "true"
   and .services.web.environment.WATCHPACK_POLLING == "true"
   and (.services.web.volumes | any(.target == "/app"))
+  and (.services.web.volumes | any(.target == "/app/.next" and .type == "volume" and .source == "web_next_cache"))
   and (.services.web.volumes | any(.target == "/app/node_modules" and .type == "volume"))
   and (.services.web.volumes | any(.target == "/pnpm/store" and .type == "volume" and .source == "web_pnpm_store"))
   and (.services.postgres.volumes | any(.target == "/var/lib/postgresql/data"))
@@ -181,6 +182,14 @@ jq -e '
 
 jq -e '
   ([.services.api.volumes[]?.target, .services.web.volumes[]?.target] | all(. != "/var/lib/postgresql/data" and . != "/data"))
+' >/dev/null <<<"${dev_config}"
+
+jq -e '
+  (.volumes.web_next_cache != null)
+  and (.volumes.web_next_cache != .volumes.web_node_modules)
+  and (.volumes.web_next_cache != .volumes.web_pnpm_store)
+  and (.volumes.web_next_cache != .volumes.api_node_modules)
+  and (.volumes.web_next_cache != .volumes.api_pnpm_store)
 ' >/dev/null <<<"${dev_config}"
 
 jq -e '

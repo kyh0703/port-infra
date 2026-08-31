@@ -30,9 +30,11 @@ services:
       - ../web:/app
       - web_node_modules:/app/node_modules
       - web_pnpm_store:/pnpm/store
+      - web_next_cache:/app/.next
 
 volumes:
   api_node_modules:
   web_node_modules:
   api_pnpm_store:
   web_pnpm_store:
+  web_next_cache:
