@@ -151,16 +151,24 @@ grep -Fq 'grafana_data:' compose.yml
 printf 'compose contract: ok\n'
 
 jq -e '
-  (.services.api.build.context | endswith("/api"))
+  .services.api.image == "port-api-dev-runtime:local"
+  and (.services.api.build.context | endswith("/api"))
   and .services.api.build.target == "deps"
-  and .services.api.command == ["pnpm", "dev"]
+  and .services.api.command == ["sh", "-lc", "pnpm install --frozen-lockfile && exec pnpm dev"]
   and .services.api.environment.NODE_ENV == "development"
+  and .services.api.environment.CHOKIDAR_USEPOLLING == "true"
   and (.services.api.volumes | any(.target == "/app"))
+  and (.services.api.volumes | any(.target == "/app/node_modules" and .type == "volume"))
+  and .services.web.image == "port-web-dev-runtime:local"
   and (.services.web.build.context | endswith("/web"))
   and .services.web.build.target == "deps"
-  and .services.web.command == ["pnpm", "dev"]
+  and .services.web.command == ["sh", "-lc", "pnpm install --frozen-lockfile && exec pnpm dev"]
   and .services.web.environment.NODE_ENV == "development"
+  and .services.web.environment.HOSTNAME == "0.0.0.0"
+  and .services.web.environment.CHOKIDAR_USEPOLLING == "true"
+  and .services.web.environment.WATCHPACK_POLLING == "true"
   and (.services.web.volumes | any(.target == "/app"))
+  and (.services.web.volumes | any(.target == "/app/node_modules" and .type == "volume"))
   and (.services.postgres.volumes | any(.target == "/var/lib/postgresql/data"))
   and (.services.redis.volumes | any(.target == "/data"))
 ' >/dev/null <<<"${dev_config}"

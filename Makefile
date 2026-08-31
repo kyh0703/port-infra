@@ -1,8 +1,9 @@
 COMPOSE ?= $(shell docker compose version >/dev/null 2>&1 && printf 'docker compose' || printf 'docker-compose')
-DEV_COMPOSE := $(COMPOSE) -f compose.yml -f compose.dev.yml
 COMPOSE_PROJECT_NAME ?= infra
 override COMPOSE_PROJECT_NAME := infra
 export COMPOSE_PROJECT_NAME
+
+DEV_COMPOSE := $(COMPOSE) -f compose.yml -f compose.dev.yml
 
 ifneq (,$(wildcard .env))
 include .env
@@ -80,13 +81,13 @@ logs:
 	$(COMPOSE) logs --tail=100 $(LOG_SERVICES)
 
 dev-up:
-	$(DEV_COMPOSE) up -d
+	$(DEV_COMPOSE) up -d --build api web
 
 dev-logs:
 	$(DEV_COMPOSE) logs -f api web
 
 dev-stop:
-	$(DEV_COMPOSE) stop
+	$(DEV_COMPOSE) stop api web
 
 infra-up:
 	$(COMPOSE) up -d $(INFRA_SERVICES)

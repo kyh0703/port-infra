@@ -13,6 +13,14 @@ grep -Fq 'compose.dev.yml' Makefile
 grep -Fq 'dev-up:' Makefile
 grep -Fq 'dev-logs:' Makefile
 grep -Fq 'dev-stop:' Makefile
+! grep -Fq 'PORT_WORKSPACE_ROOT' Makefile compose.dev.yml
+grep -Fq -- 'DEV_COMPOSE := $(COMPOSE) -f compose.yml -f compose.dev.yml' Makefile
+grep -Fq 'context: ../api' compose.dev.yml
+grep -Fq 'context: ../web' compose.dev.yml
+grep -Fq '../api:/app' compose.dev.yml
+grep -Fq '../web:/app' compose.dev.yml
+grep -Fq '$(DEV_COMPOSE) up -d --build api web' Makefile
+grep -Fq '$(DEV_COMPOSE) stop api web' Makefile
 grep -Fq 'stack/volumes' README.md
 grep -Fq 'idempotent' README.md
 grep -Fq 'PULL_SERVICES := $(APP_SERVICES) api-migrator rag-migrator livekit' Makefile

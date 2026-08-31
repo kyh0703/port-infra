@@ -44,8 +44,10 @@ Compose project name은 `infra`로 고정하므로 worktree가 달라도 같은 
 ## 소스 마운트 개발 모드
 
 API와 Web을 로컬 소스로 실행하고 파일 변경 시 watch/hot reload를 사용하려면 다음 명령을 실행한다.
-`compose.dev.yml`은 기본 `compose.yml`을 덮어쓰며, sibling 저장소의 `../api`와 `../web`을
-각 컨테이너 `/app`에 마운트하고 Dockerfile의 `deps` stage에서 의존성을 준비한다.
+`compose.dev.yml`은 기본 `compose.yml`을 덮어쓰며, infra 루트 기준 sibling 저장소의 `../api`와 `../web`을
+각 컨테이너 `/app`에 마운트하고 dev 전용 로컬 이미지로 `deps` stage를 다시 빌드한다.
+컨테이너 시작 시 `pnpm install --frozen-lockfile`을 먼저 실행하므로 lockfile 변경 후에도
+stale `node_modules` volume을 재사용하지 않는다.
 
 ```bash
 make dev-up
@@ -53,9 +55,10 @@ make dev-logs
 make dev-stop
 ```
 
-`dev-stop`은 컨테이너만 중지하며 PostgreSQL·Redis 등 named volume은 삭제하지 않는다.
-개발 모드는 infra 저장소 루트에서 실행해야 하며, API는 `NODE_ENV=development`로,
-Web은 `pnpm dev`로 실행된다. 기본 이미지 기반 실행으로 돌아가려면 `make up`을 사용한다.
+`dev-stop`은 `api`와 `web` 컨테이너만 중지하며 PostgreSQL·Redis 등 named volume은 삭제하지 않는다.
+개발 모드는 primary infra 저장소 루트에서 실행해야 하며,
+API는 `NODE_ENV=development`, Web은 `pnpm dev`로 실행된다. 기본 이미지 기반 실행으로
+돌아가려면 `make up`을 사용한다.
 
 Tailscale은 host-level client만 사용한다. Tailnet 내부에서는 `http://macbookpro:3000`으로
 직접 접근하며 Serve, Funnel, 서비스별 Tailscale 컨테이너는 사용하지 않는다.
