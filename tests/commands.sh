@@ -19,7 +19,7 @@ grep -Fq 'context: ../api' compose.dev.yml
 grep -Fq 'context: ../web' compose.dev.yml
 grep -Fq '../api:/app' compose.dev.yml
 grep -Fq '../web:/app' compose.dev.yml
-grep -Fq '$(DEV_COMPOSE) up -d --build api web' Makefile
+grep -Fq '$(DEV_COMPOSE) up -d --build --no-deps api web' Makefile
 grep -Fq '$(DEV_COMPOSE) stop api web' Makefile
 grep -Fq 'stack/volumes' README.md
 grep -Fq 'idempotent' README.md

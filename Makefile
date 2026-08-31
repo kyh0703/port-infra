@@ -81,7 +81,7 @@ logs:
 	$(COMPOSE) logs --tail=100 $(LOG_SERVICES)
 
 dev-up:
-	$(DEV_COMPOSE) up -d --build api web
+	$(DEV_COMPOSE) up -d --build --no-deps api web
 
 dev-logs:
 	$(DEV_COMPOSE) logs -f api web

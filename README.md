@@ -56,6 +56,8 @@ make dev-stop
 ```
 
 `dev-stop`은 `api`와 `web` 컨테이너만 중지하며 PostgreSQL·Redis 등 named volume은 삭제하지 않는다.
+`make dev-up` 실행 전에는 기본 Compose로 PostgreSQL, Redis와 같은 infra 의존 서비스가 이미
+실행 중이어야 하며, 이 명령은 API와 Web만 build/recreate한다.
 개발 모드는 primary infra 저장소 루트에서 실행해야 하며,
 API는 `NODE_ENV=development`, Web은 `pnpm dev`로 실행된다. 기본 이미지 기반 실행으로
 돌아가려면 `make up`을 사용한다.

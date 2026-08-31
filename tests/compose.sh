@@ -156,6 +156,7 @@ jq -e '
   and .services.api.build.target == "deps"
   and .services.api.command == ["sh", "-lc", "pnpm install --frozen-lockfile && exec pnpm dev"]
   and .services.api.environment.NODE_ENV == "development"
+  and .services.api.environment.CI == "true"
   and .services.api.environment.CHOKIDAR_USEPOLLING == "true"
   and (.services.api.volumes | any(.target == "/app"))
   and (.services.api.volumes | any(.target == "/app/node_modules" and .type == "volume"))
@@ -164,6 +165,7 @@ jq -e '
   and .services.web.build.target == "deps"
   and .services.web.command == ["sh", "-lc", "pnpm install --frozen-lockfile && exec pnpm dev"]
   and .services.web.environment.NODE_ENV == "development"
+  and .services.web.environment.CI == "true"
   and .services.web.environment.HOSTNAME == "0.0.0.0"
   and .services.web.environment.CHOKIDAR_USEPOLLING == "true"
   and .services.web.environment.WATCHPACK_POLLING == "true"
