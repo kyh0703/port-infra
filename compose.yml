@@ -52,12 +52,87 @@ services:
 
   livekit:
     image: livekit/livekit-server:latest
-    command: ["--dev", "--bind", "0.0.0.0"]
+    command: ["--dev", "--bind", "0.0.0.0", "--redis-host", "redis:6379"]
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
     ports:
       - "7880:7880/tcp"
       - "7881:7881/tcp"
       - "7882:7882/udp"
+
+  livekit-sip:
+    image: livekit/sip:v1.7.0
+    profiles: ["telephony"]
+    restart: unless-stopped
+    depends_on:
+      livekit:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    environment:
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+      LIVEKIT_URL: ws://livekit:7880
+      REDIS_ADDRESS: redis:6379
+    command: ["--config", "/etc/livekit-sip.yaml"]
+    volumes:
+      - ./livekit/sip.yaml:/etc/livekit-sip.yaml:ro
+    ports:
+      - "127.0.0.1:${LIVEKIT_SIP_HEALTH_PORT:-18090}:8080/tcp"
+      - "127.0.0.1:${LIVEKIT_SIP_PORT:-15090}:5060/udp"
+      - "127.0.0.1:${LIVEKIT_SIP_RTP_PORT:-15000}-${LIVEKIT_SIP_RTP_END_PORT:-15009}:10000-10009/udp"
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -ec
+        - |
+          exec 3<>/dev/tcp/127.0.0.1/8080
+          printf 'GET / HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3
+          read -r _ status _ <&3
+          test "$$status" = 200
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  asterisk:
+    image: andrius/asterisk:22-alpine
+    profiles: ["telephony"]
+    restart: unless-stopped
+    depends_on:
+      livekit-sip:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${ASTERISK_SIP_PORT:-15060}:5060/udp"
+      - "127.0.0.1:${ASTERISK_RTP_PORT:-15100}-${ASTERISK_RTP_END_PORT:-15109}:10000-10009/udp"
+    volumes:
+      - ./asterisk/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./asterisk/rtp.conf:/etc/asterisk/rtp.conf:ro
+      - ./asterisk/modules.conf:/etc/asterisk/modules.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "asterisk -rx 'pjsip show endpoint livekit' | grep -q 'Endpoint:  livekit'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  livekit-cli:
+    image: livekit/livekit-cli:v2.16.3
+    profiles: ["telephony"]
+    restart: "no"
+    depends_on:
+      livekit:
+        condition: service_started
+    environment:
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+    volumes:
+      - ./sip:/sip:ro
 
   api:
     image: ghcr.io/kyh0703/port-api:dev

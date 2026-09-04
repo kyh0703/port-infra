@@ -123,6 +123,29 @@ API와 Voice Agent는
 LiveKit dev server의 기본 개발 credential은 `devkey`/`secret`이며 운영 credential로
 사용하지 않는다.
 
+## 로컬 SIP/전화 테스트 스택
+
+Asterisk와 LiveKit SIP는 기본 실행에서 제외된 `telephony` profile로 제공한다.
+기존 `livekit`과 `redis`를 재사용하고 Compose 내부 DNS로만 통신하므로, 기본 `make deploy`의
+리소스 부담과 기존 named volume에는 영향이 없다.
+
+```bash
+make telephony-up
+make telephony-provision
+make telephony-health
+make telephony-logs
+```
+
+`make telephony-provision`은 `scripts/sip-provision.sh`를 통해 `sip/`의 로컬 inbound trunk, outbound trunk, dispatch rule을
+이름으로 조회한 뒤 없는 리소스만 생성한다. 따라서 두 번 실행해도 중복되지 않으며, 생성 결과에
+반환되는 inbound/outbound trunk ID를 기록해 둔다. 실제 전화번호를 연결할 때는 Port Admin/API에서
+inbound trunk에 번호와 Asterisk 경로를 바인딩하고, outbound transfer가 필요하면 local voice-agent
+환경의 outbound trunk ID를 설정한다. 외부 통신사 trunk, 공인 IP, TLS, 녹음/Egress는 포함하지 않는다.
+
+Echo 테스트 목적의 Asterisk 내선 `600`은 로컬 RTP 범위에서 동작한다. SIP 포트는 loopback에만
+바인딩된 `15090`(LiveKit SIP), `15060`(Asterisk), LiveKit SIP health는 `18090`이며 필요하면 `.env`에서
+변경할 수 있다. 로컬 inbound 테스트 번호는 `2000`이다. 종료할 때는 `make telephony-down`을 사용한다.
+
 로컬 Compose에서는 adaptor의 PAT identity integration을 비활성화한다. identity endpoint는
 HTTPS endpoint를 제공하는 환경에서만 local env로 opt-in하며, `PUBLIC_BASE_URL`은
 `http://macbookpro:3002`로 고정한다.
