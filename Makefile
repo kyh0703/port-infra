@@ -20,6 +20,7 @@ WEB_PORT := 3000
 RAG_PORT ?= 8001
 VOICE_AGENT_METRICS_PORT ?= 19091
 LIVEKIT_PORT ?= 7880
+LIVEKIT_SIP_HEALTH_PORT ?= 18090
 AGGREGATOR_PORT ?= 3001
 ADAPTOR_PORT := 3002
 HEALTH_RETRIES ?= 30
@@ -34,7 +35,7 @@ ifeq ($(strip $(CHANGED_SERVICES)),)
 $(error CHANGED_SERVICES must not be empty)
 endif
 
-.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs tools-up tools-down observability-up observability-down observability-logs db-ensure-user tailscale-direct dev-up dev-logs dev-stop test up down ps
+.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs tools-up tools-down observability-up observability-down observability-logs telephony-up telephony-provision telephony-health telephony-logs telephony-down db-ensure-user tailscale-direct dev-up dev-logs dev-stop test up down ps
 
 colima-start:
 	colima start --vm-type vz --runtime docker --cpus 4 --memory 6 --disk 60
@@ -112,6 +113,23 @@ observability-down:
 
 observability-logs:
 	$(COMPOSE) --profile observability logs -f prometheus grafana
+
+telephony-up:
+	$(COMPOSE) --profile telephony up -d --wait livekit-sip asterisk
+
+telephony-provision: telephony-up
+	COMPOSE="$(COMPOSE)" bash scripts/sip-provision.sh
+
+telephony-health:
+	@curl -fsS "http://127.0.0.1:$(LIVEKIT_SIP_HEALTH_PORT)" >/dev/null
+	@$(COMPOSE) --profile telephony exec -T asterisk asterisk -rx 'pjsip show endpoint livekit' | grep -q 'Endpoint:  livekit'
+	@$(COMPOSE) --profile telephony ps livekit-sip asterisk
+
+telephony-logs:
+	$(COMPOSE) --profile telephony logs --tail=100 livekit-sip asterisk
+
+telephony-down:
+	$(COMPOSE) --profile telephony stop livekit-sip asterisk livekit-cli
 
 db-ensure-user:
 	$(COMPOSE) up -d postgres

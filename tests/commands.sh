@@ -34,6 +34,11 @@ grep -Fq 'WEB_PORT := 3000' Makefile
 grep -Fq 'RAG_PORT ?= 8001' Makefile
 grep -Fq 'VOICE_AGENT_METRICS_PORT ?= 19091' Makefile
 grep -Fq 'LIVEKIT_PORT ?= 7880' Makefile
+grep -Fq 'LIVEKIT_SIP_HEALTH_PORT ?= 18090' Makefile
+grep -Fq 'noload => res_phoneprov.so' asterisk/modules.conf
+grep -Fq 'noload => res_hep_pjsip.so' asterisk/modules.conf
+grep -Fq 'noload => app_stasis.so' asterisk/modules.conf
+grep -Fq 'noload => cdr_custom.so' asterisk/modules.conf
 grep -Fq 'AGGREGATOR_PORT ?= 3001' Makefile
 grep -Fq 'ADAPTOR_PORT := 3002' Makefile
 grep -Fq '"api|http://127.0.0.1:$(API_PORT)/api/v1/health"' Makefile
@@ -53,6 +58,21 @@ grep -Fq '$(MAKE) health' Makefile
 grep -Fq 'filter-out $(COMPOSE_ALLOWLIST)' Makefile
 grep -Fq 'CHANGED_SERVICES="api web"' README.md
 grep -Fq 'bash tests/commands.sh' Makefile
+grep -Fq 'telephony-up:' Makefile
+grep -Fq -- '--profile telephony up -d --wait livekit-sip asterisk' Makefile
+grep -Fq 'telephony-provision:' Makefile
+grep -Fq 'telephony-health:' Makefile
+grep -Fq 'telephony-logs:' Makefile
+grep -Fq 'telephony-down:' Makefile
+grep -Fq 'scripts/sip-provision.sh' Makefile
+grep -Fq 'telephony' README.md
+grep -Fq 'sip-provision.sh' README.md
+grep -Fq 'sipTrunkId' scripts/sip-provision.sh
+grep -Fq 'sipDispatchRuleId' scripts/sip-provision.sh
+grep -Fq 'wait_for_livekit' scripts/sip-provision.sh
+grep -Fq 'SIP_PROVISION_RETRIES' scripts/sip-provision.sh
+grep -Fq "pjsip show endpoint livekit" Makefile
+! grep -Fq 'nc -z 127.0.0.1 $(ASTERISK_SIP_PORT)' Makefile
 
 grep -Fq 'tailscale-direct' Makefile
 grep -Fq 'tailscale serve reset' Makefile

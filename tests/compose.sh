@@ -12,6 +12,7 @@ fi
 config="$(${compose_command[@]} --env-file .env.example -f compose.yml --profile observability --profile tools config --format json)"
 test ! -e compose.local.yml
 dev_config="$(${compose_command[@]} --env-file .env.example -f compose.yml -f compose.dev.yml config --format json)"
+telephony_config="$(${compose_command[@]} --env-file .env.example -f compose.yml --profile telephony config --format json)"
 
 jq -e '
   . as $root |
@@ -29,7 +30,7 @@ jq -e '
   and .services.aggregator.image == "ghcr.io/kyh0703/port-aggregator:dev"
   and .services.adaptor.image == "ghcr.io/kyh0703/port-adaptor:dev"
   and .services.livekit.image == "livekit/livekit-server:latest"
-  and .services.livekit.command == ["--dev", "--bind", "0.0.0.0"]
+  and .services.livekit.command == ["--dev", "--bind", "0.0.0.0", "--redis-host", "redis:6379"]
 ' >/dev/null <<<"${config}"
 
 jq -e '
@@ -200,3 +201,47 @@ jq -e '
 ' >/dev/null <<<"${dev_config}"
 
 printf 'compose dev contract: ok\n'
+
+jq -e '
+  .services.livekit.profiles == null
+  and (.services.livekit.command | index("--redis-host") != null)
+  and .services.livekit.depends_on.redis.condition == "service_healthy"
+  and .services."livekit-sip".profiles == ["telephony"]
+  and .services."livekit-sip".image == "livekit/sip:v1.7.0"
+  and .services."livekit-sip".environment.LIVEKIT_API_KEY == "devkey"
+  and .services."livekit-sip".environment.LIVEKIT_API_SECRET == "secret"
+  and .services."livekit-sip".environment.LIVEKIT_URL == "ws://livekit:7880"
+  and .services."livekit-sip".environment.REDIS_ADDRESS == "redis:6379"
+  and (.services."livekit-sip".ports | any(.published == "18090" and .target == 8080))
+  and (.services."livekit-sip".ports | any(.published == "15090" and .target == 5060))
+  and (.services."livekit-sip".ports | any(.published == "15000" and .target == 10000))
+  and .services.asterisk.profiles == ["telephony"]
+  and .services.asterisk.image == "andrius/asterisk:22-alpine"
+  and (.services.asterisk.volumes | any(.target == "/etc/asterisk/modules.conf" and .read_only == true))
+  and (.services.asterisk.ports | any(.published == "15060" and .target == 5060))
+  and (.services.asterisk.ports | any(.published == "15100" and .target == 10000))
+  and .services."livekit-cli".profiles == ["telephony"]
+  and .services."livekit-cli".image == "livekit/livekit-cli:v2.16.3"
+  and (.services."livekit-cli".volumes | any(.target == "/sip" and .read_only == true))
+  and (.services."livekit-sip".ports | all(.host_ip == "127.0.0.1"))
+  and (.services.asterisk.ports | all(.host_ip == "127.0.0.1"))
+  and .services."livekit-sip".healthcheck.test[0] == "CMD"
+  and .services."livekit-sip".healthcheck.test[1] == "bash"
+  and (.services."livekit-sip".healthcheck.test[3] | contains("GET / HTTP/1.0"))
+  and (.services."livekit-sip".healthcheck.test[3] | contains("status") and contains("200"))
+  and (.services."livekit-sip" | has("network_mode") | not)
+  and (.services.asterisk | has("network_mode") | not)
+' >/dev/null <<<"${telephony_config}"
+
+jq -e '(.services."livekit-sip" == null and .services.asterisk == null and .services."livekit-cli" == null)' >/dev/null <<<"${config}"
+test -f sip/inbound-trunk.json
+test -f sip/outbound-trunk.json
+test -f sip/dispatch-rule.json
+test -x scripts/sip-provision.sh
+jq -e '.dispatch_rule.roomConfig.agents[0].agentName == "voice-agent"' sip/dispatch-rule.json >/dev/null
+jq -e '.trunk.numbers == ["2000"]' sip/inbound-trunk.json >/dev/null
+jq -e '.trunk.numbers == ["600"]' sip/outbound-trunk.json >/dev/null
+grep -Fq 'same => n,Echo()' asterisk/extensions.conf
+grep -Fq 'PJSIP/${EXTEN:1}@livekit' asterisk/extensions.conf
+grep -Fq 'noload => chan_alsa.so' asterisk/modules.conf
+printf 'telephony compose contract: ok\n'

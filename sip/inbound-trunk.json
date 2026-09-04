@@ -1,0 +1,6 @@
+{
+  "trunk": {
+    "name": "port-local-inbound",
+    "numbers": ["2000"]
+  }
+}

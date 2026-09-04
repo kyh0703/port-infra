@@ -1,0 +1,8 @@
+ws_url: ws://livekit:7880
+redis:
+  address: redis:6379
+sip_port: 5060
+rtp_port: 10000-10009
+health_port: 8080
+use_external_ip: false
+log_level: info

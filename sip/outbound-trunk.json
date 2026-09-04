@@ -1,0 +1,7 @@
+{
+  "trunk": {
+    "name": "port-local-outbound",
+    "address": "asterisk:5060",
+    "numbers": ["600"]
+  }
+}

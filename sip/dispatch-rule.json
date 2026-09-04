@@ -1,0 +1,14 @@
+{
+  "dispatch_rule": {
+    "name": "port-local-agent-dispatch",
+    "trunk_ids": [],
+    "rule": {
+      "dispatchRuleIndividual": {
+        "roomPrefix": "port-local-sip-"
+      }
+    },
+    "roomConfig": {
+      "agents": [{"agentName": "voice-agent"}]
+    }
+  }
+}
