@@ -51,8 +51,13 @@ services:
       retries: 20
 
   livekit:
-    image: livekit/livekit-server:latest
+    image: livekit/livekit-server:v1.13.6
     command: ["--dev", "--bind", "0.0.0.0", "--redis-host", "redis:6379"]
+    environment:
+      # SIP consultation restores only microphone tracks muted by the API.
+      LIVEKIT_CONFIG: |
+        room:
+          enable_remote_unmute: true
     restart: unless-stopped
     depends_on:
       redis:
