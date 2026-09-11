@@ -29,8 +29,9 @@ jq -e '
   and .services."voice-agent".image == "ghcr.io/kyh0703/port-voice-agent:dev"
   and .services.aggregator.image == "ghcr.io/kyh0703/port-aggregator:dev"
   and .services.adaptor.image == "ghcr.io/kyh0703/port-adaptor:dev"
-  and .services.livekit.image == "livekit/livekit-server:latest"
+  and .services.livekit.image == "livekit/livekit-server:v1.13.6"
   and .services.livekit.command == ["--dev", "--bind", "0.0.0.0", "--redis-host", "redis:6379"]
+  and ((.services.livekit.environment.LIVEKIT_CONFIG // "") | contains("enable_remote_unmute: true"))
 ' >/dev/null <<<"${config}"
 
 jq -e '
