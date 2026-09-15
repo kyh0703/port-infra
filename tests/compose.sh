@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Test-only value, scoped to this config validation process; never a runtime default.
+export INTERNAL_SERVER_KEY="compose-test-only-internal-key-0123456789"
+
 if [[ -n "${COMPOSE:-}" ]]; then
   read -r -a compose_command <<<"${COMPOSE}"
 elif docker compose version >/dev/null 2>&1; then
@@ -246,3 +249,15 @@ grep -Fq 'same => n,Echo()' asterisk/extensions.conf
 grep -Fq 'PJSIP/${EXTEN:1}@livekit' asterisk/extensions.conf
 grep -Fq 'noload => chan_alsa.so' asterisk/modules.conf
 printf 'telephony compose contract: ok\n'
+
+# The key belongs to server callers only, including migration settings validation.
+jq -e '
+  .services.api.environment.INTERNAL_SERVER_KEY as $key |
+  ($key | length) >= 32
+  and .services.rag.environment.INTERNAL_SERVER_KEY == $key
+  and .services["voice-agent"].environment.INTERNAL_SERVER_KEY == $key
+  and .services["api-migrator"].environment.INTERNAL_SERVER_KEY == $key
+  and .services["rag-migrator"].environment.INTERNAL_SERVER_KEY == $key
+  and (.services.web.environment | has("INTERNAL_SERVER_KEY") | not)
+  and (.services.adaptor.environment | has("INTERNAL_SERVER_KEY") | not)
+' >/dev/null <<<"${config}"

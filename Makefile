@@ -142,6 +142,7 @@ tailscale-direct:
 	tailscale funnel status --json
 
 test:
+	python3 tests/test_internal_key_init.py
 	COMPOSE="$(COMPOSE)" bash tests/compose.sh
 	bash tests/commands.sh
 

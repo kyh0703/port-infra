@@ -18,8 +18,15 @@ colima start --vm-type vz --runtime docker --cpus 4 --memory 6 --disk 60
 
 ```bash
 cp .env.example .env
+python3 scripts/init-internal-key.py
 make infra-up
 ```
+
+`INTERNAL_SERVER_KEY`는 API·Worker·RAG 사이에서만 사용하는 공통 키다. 초기화 스크립트는
+`.env`의 다른 설정과 이미 등록한 키를 유지하며, 새 키의 값은 출력하지 않는다.
+파일 권한은 소유자만 읽고 쓸 수 있는 `0600`으로 설정한다. 키를 Git, 브라우저 환경변수,
+공개 Web 프록시나 외부 도구 헤더에 넣지 않는다. 기존 환경에 적용할 때도 초기화 후
+Worker → API → RAG 순서로 갱신하고 각 서비스의 health를 확인한다.
 
 전체 플랫폼 이미지 운영
 

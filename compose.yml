@@ -155,6 +155,8 @@ services:
         condition: service_started
     env_file:
       - ${API_ENV_FILE:-./config/api.env.example}
+    environment:
+      INTERNAL_SERVER_KEY: ${INTERNAL_SERVER_KEY:?Set INTERNAL_SERVER_KEY in .env}
     extra_hosts:
       - "macbookpro:host-gateway"
       - "host.docker.internal:host-gateway"
@@ -194,6 +196,8 @@ services:
         condition: service_completed_successfully
     env_file:
       - ${API_ENV_FILE:-./config/api.env.example}
+    environment:
+      INTERNAL_SERVER_KEY: ${INTERNAL_SERVER_KEY:?Set INTERNAL_SERVER_KEY in .env}
     extra_hosts:
       - "macbookpro:host-gateway"
       - "host.docker.internal:host-gateway"
@@ -225,6 +229,8 @@ services:
         condition: service_completed_successfully
     env_file:
       - ${RAG_ENV_FILE:-./config/rag.env.example}
+    environment:
+      INTERNAL_SERVER_KEY: ${INTERNAL_SERVER_KEY:?Set INTERNAL_SERVER_KEY in .env}
     ports:
       - "${RAG_PORT:-8001}:8000"
     healthcheck:
@@ -244,6 +250,8 @@ services:
         condition: service_completed_successfully
     env_file:
       - ${RAG_ENV_FILE:-./config/rag.env.example}
+    environment:
+      INTERNAL_SERVER_KEY: ${INTERNAL_SERVER_KEY:?Set INTERNAL_SERVER_KEY in .env}
     command: ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
 
   voice-agent:
@@ -260,6 +268,8 @@ services:
         condition: service_healthy
     env_file:
       - ${VOICE_AGENT_ENV_FILE:-./config/voice-agent.env.example}
+    environment:
+      INTERNAL_SERVER_KEY: ${INTERNAL_SERVER_KEY:?Set INTERNAL_SERVER_KEY in .env}
     extra_hosts:
       - "macbookpro:host-gateway"
       - "host.docker.internal:host-gateway"
