@@ -87,6 +87,8 @@ fi
 test -f openbao/policies/api-pii-envelope.hcl
 grep -Fq 'path "secret/data/port/api/pii-envelope"' openbao/policies/api-pii-envelope.hcl
 grep -Fq 'path "transit/decrypt/port-pii-kek"' openbao/policies/api-pii-envelope.hcl
+grep -Fq 'path "secret/data/port/api/credential-envelope"' openbao/policies/api-pii-envelope.hcl
+grep -Fq 'path "transit/decrypt/port-credential-kek"' openbao/policies/api-pii-envelope.hcl
 grep -Fq 'path "auth/token/revoke-self"' openbao/policies/api-pii-envelope.hcl
 grep -Fq 'capabilities = ["read"]' openbao/policies/api-pii-envelope.hcl
 grep -Fq 'capabilities = ["update"]' openbao/policies/api-pii-envelope.hcl
@@ -141,7 +143,7 @@ jq -e '
 
 jq -e '
   . as $root |
-  (["DATABASE_URL", "REDIS_URL", "RAG_URL", "RAG_RETRIEVAL_CAPABILITY_SECRET", "WEB_ORIGIN", "AUTH_PASSWORD_RESET_SECRET", "AUTH_EMAIL_VERIFICATION_SECRET", "AUTH_RATE_LIMIT_SECRET", "WEB_CHAT_RESUME_TOKEN_SECRET", "AUTH_SESSION_COOKIE_SECURE", "AUTH_SESSION_TTL_SECONDS", "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY"] | all(.[]; $root.services.api.environment[.] != null))
+  (["DATABASE_URL", "REDIS_URL", "RAG_URL", "RAG_RETRIEVAL_CAPABILITY_SECRET", "WEB_ORIGIN", "AUTH_PASSWORD_RESET_SECRET", "AUTH_EMAIL_VERIFICATION_SECRET", "AUTH_RATE_LIMIT_SECRET", "WEB_CHAT_RESUME_TOKEN_SECRET", "AUTH_SESSION_COOKIE_SECURE", "AUTH_SESSION_TTL_SECONDS", "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET"] | all(.[]; $root.services.api.environment[.] != null))
   and ([.services.api.environment | keys[] | select(test("KEYCLOAK|KC_"))] | length == 0)
   and .services.api.environment.WEB_ORIGIN == "http://macbookpro:3000"
   and .services.api.environment.LIVEKIT_URL == "ws://macbookpro:7880"
@@ -198,8 +200,10 @@ grep -Fq 'aggregator' postgres/init/01-ensure-port-user.sh
 ! grep -Fq 'PLATFORM_HOSTNAME' .env.example
 grep -Fq '"macbookpro:host-gateway"' compose.yml
 
-api_voice_key=$(jq -r '.services.api.environment.VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY' <<<"${config}")
-[[ "$(printf '%s' "${api_voice_key}" | openssl base64 -d -A | wc -c | tr -d ' ')" == "32" ]]
+jq -e '
+  [.services.api.environment, .services."api-migrator".environment] |
+  all(.[]; (has("VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY") or has("AGENT_TOOL_AUTH_ENCRYPTION_KEY")) | not)
+' >/dev/null <<<"${config}"
 
 jq -e '
   .services.redis.ports[0].published == "6379"
