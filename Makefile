@@ -113,6 +113,19 @@ openbao-snapshot:
 openbao-app-role:
 	python3 scripts/openbao-app-role.py
 
+.PHONY: openbao-keychain-prepare openbao-keychain-init openbao-auto-install openbao-auto-stop
+openbao-keychain-prepare:
+	python3 scripts/openbao-autounseal.py prepare
+
+openbao-keychain-init:
+	python3 scripts/openbao-autounseal.py setup-key
+
+openbao-auto-install:
+	python3 scripts/openbao-autounseal.py install
+
+openbao-auto-stop:
+	python3 scripts/openbao-autounseal.py stop
+
 openbao-down:
 	bash scripts/openbao.sh down
 

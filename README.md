@@ -142,6 +142,48 @@ helper는 volume을 먼저 만들고 비어 있는지 확인한다. 기존 파�
 
 Compose healthcheck는 프로세스와 TLS listener liveness만 확인하므로 초기 sealed 상태도 healthy로 표시한다. API readiness는 별도 startup secret access 검증에서 fail closed 해야 한다.
 
+### macOS Keychain 자동 unseal
+
+Mac 로그인 후 별도 share 입력 없이 기동하려면 Keychain을 신뢰원으로 사용하는 static seal을 설정한다.
+외부 KMS 대신 현재 Mac 로그인 Keychain에 32-byte seal key를 보관하는 선택이다. 이 키는 API의 DEK나 Transit KEK와 다르며,
+API 컨테이너에는 전달되지 않는다. macOS 로그인 전 FileVault/Keychain 잠금 해제는 이 기능의 범위에 포함되지 않는다.
+
+`make openbao-keychain-prepare`는 Security.framework Swift helper를 사용자 전용
+`~/.local/share/port-openbao-autounseal/`에 컴파일·서명한다. `make openbao-keychain-init`은 로그인 세션에서 최초 키를 생성하고,
+기존 Keychain 항목이 있으면 유지한다. helper 자체만 trusted app으로 등록하며 키 값을 명령 인자·환경변수·로그에 넣지 않는다.
+headless shell에서는 login Keychain 접근이 거부될 수 있으므로 init/check는 일회성 GUI LaunchAgent에서 실행한다.
+
+기존 Shamir 서버 전환 순서:
+
+1. 기존 Raft snapshot 또는 정지 상태의 Raft volume 사본과 unseal shares를 외부 owner-only 보관소에 확보한다.
+2. `make openbao-keychain-init`으로 Keychain 키를 준비한다. `.env`의 `OPENBAO_SEAL_MODE`는 아직 `shamir`여야 한다.
+3. `.env`에 `OPENBAO_SEAL_MODE=static`을 설정하고 OpenBao만 재생성한다.
+4. `make openbao-auto-install`로 로그인 LaunchAgent를 설치한다. controller가 Keychain 키를 읽어 OpenBao 전용 tmpfs
+   `/bao/seal-runtime/current.key`에 stdin으로 전달한다. 권한은 `openbao:openbao`, `0400`이다.
+5. 최초 전환 때만 `docker compose exec openbao bao operator unseal -migrate`를 서로 다른 기존 shares로 실행해 threshold를 충족한다.
+   기존 shares는 이후 recovery keys 역할을 한다. 기존 KEK/DEKs/AppRole/사용자 암호문은 유지된다.
+6. `make openbao-status`에서 `type=static`, `sealed=false`를 확인하고 OpenBao 재시작 후 자동으로 동일 상태가 되는지 검증한다.
+
+설치되는 LaunchAgent는 `~/Library/LaunchAgents/com.port.infra.openbao-autounseal.plist`다.
+로그인할 때 Colima가 꺼져 있으면 한 번 시작하고 OpenBao의 메모리 키를 준비한다. 이후 수동으로 Colima나 OpenBao를 중지하면
+감시 중에 억지로 다시 시작하지 않는다. Colima를 다시 시작하거나 컨테이너가 재시작되면 새 tmpfs에 키를 다시 전달한다.
+이미 실행 중인 OpenBao에 운영자가 `seal` 명령을 내린 경우에는 자동으로 취소하지 않는다.
+
+```bash
+make openbao-auto-install
+launchctl print gui/$(id -u)/com.port.infra.openbao-autounseal
+make openbao-status
+make openbao-auto-stop
+```
+
+로그는 `~/Library/Logs/port-openbao-autounseal/`의 owner-only 파일이며 상태만 기록한다.
+Keychain 항목을 읽지 못하면 자동 생성이나 덮어쓰기를 하지 않고 대기한다. helper의 `emit`은 supervisor 내부 pipe 전용이다.
+이를 터미널에서 직접 실행하거나 파일로 redirect하지 않는다. helper 재컴파일은 trusted app identity를 바꿀 수 있으므로
+installer는 같은 source fingerprint의 바이너리를 재사용하고 변경 시 별도 trust 이전을 요구한다.
+
+Keychain 항목을 삭제하거나 초기화하면 static seal을 복구할 수 없으므로 macOS Keychain 백업과 이전 Shamir 복구 자료를 보존한다.
+`make openbao-auto-stop`은 supervisor만 중지하고 Keychain 키를 삭제하지 않는다. 로그아웃 상태에서는 사용자 LaunchAgent가 실행되지 않는다.
+
 스냅샷은 권한 있는 token을 숨겨 입력한 뒤 로컬 무시 경로에 저장한다. 기본 경로는 `data/openbao/snapshots/`이며, 경로를 바꾸면 `make openbao-up`와 `make openbao-snapshot`에 같은 `OPENBAO_SNAPSHOT_DIR` 값을 전달한다. Compose bind mount도 이 값을 사용한다. 스냅샷 파일 쓰기는 명시적인 one-shot root exec로 0700 디렉터리 권한을 사용하며, OpenBao 서버 프로세스 자체는 `openbao` UID로 실행된다.
 
 ```bash

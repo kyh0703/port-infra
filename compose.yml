@@ -344,6 +344,7 @@ services:
     environment:
       BAO_ADDR: https://openbao:8200
       BAO_CACERT: /bao/tls-runtime/ca.crt
+      OPENBAO_SEAL_MODE: ${OPENBAO_SEAL_MODE:-shamir}
     ports:
       - "127.0.0.1:${OPENBAO_PORT:-18200}:8200"
     expose:
@@ -353,12 +354,14 @@ services:
       - openbao_audit:/bao/audit
       - ${OPENBAO_SNAPSHOT_DIR:-./data/openbao/snapshots}:/bao/snapshots
       - ./openbao/config.hcl:/bao/config/openbao.hcl:ro
+      - ./openbao/seal-static.hcl:/bao/config/seal-static.hcl:ro
       - ./openbao/entrypoint.sh:/usr/local/bin/openbao-entrypoint:ro
       - ./data/openbao/tls/ca.crt:/bao/tls/ca.crt:ro
       - ./data/openbao/tls/server.crt:/bao/tls/server.crt:ro
       - ./data/openbao/tls/server.key:/bao/tls/server.key:ro
     tmpfs:
       - /bao/tls-runtime
+      - /bao/seal-runtime
     networks:
       - secrets_internal
       - openbao_host
