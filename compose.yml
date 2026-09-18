@@ -157,9 +157,19 @@ services:
       - ${API_ENV_FILE:-./config/api.env.example}
     environment:
       INTERNAL_SERVER_KEY: ${INTERNAL_SERVER_KEY:?Set INTERNAL_SERVER_KEY in .env}
+      OPENBAO_ADDR: https://openbao:8200
+      OPENBAO_CA_CERT_FILE: /run/openbao-ca/ca.crt
+      OPENBAO_ROLE_ID_FILE: /run/openbao/api-role-id
+      OPENBAO_SECRET_ID_FILE: /run/openbao/api-secret-id
     extra_hosts:
       - "macbookpro:host-gateway"
       - "host.docker.internal:host-gateway"
+    volumes:
+      - openbao_api_credentials:/run/openbao:ro
+      - ./data/openbao/tls/ca.crt:/run/openbao-ca/ca.crt:ro
+    networks:
+      - default
+      - secrets_internal
     ports:
       - "${API_PORT:-8000}:8000"
       - "${API_GRPC_PORT:-8080}:8080"
@@ -198,9 +208,19 @@ services:
       - ${API_ENV_FILE:-./config/api.env.example}
     environment:
       INTERNAL_SERVER_KEY: ${INTERNAL_SERVER_KEY:?Set INTERNAL_SERVER_KEY in .env}
+      OPENBAO_ADDR: https://openbao:8200
+      OPENBAO_CA_CERT_FILE: /run/openbao-ca/ca.crt
+      OPENBAO_ROLE_ID_FILE: /run/openbao/api-role-id
+      OPENBAO_SECRET_ID_FILE: /run/openbao/api-secret-id
     extra_hosts:
       - "macbookpro:host-gateway"
       - "host.docker.internal:host-gateway"
+    volumes:
+      - openbao_api_credentials:/run/openbao:ro
+      - ./data/openbao/tls/ca.crt:/run/openbao-ca/ca.crt:ro
+    networks:
+      - default
+      - secrets_internal
 
   web:
     image: ghcr.io/kyh0703/port-web:dev
@@ -315,6 +335,40 @@ services:
       retries: 20
       start_period: 20s
 
+  openbao:
+    image: ghcr.io/openbao/openbao:2.6.2
+    restart: unless-stopped
+    user: "0:0"
+    entrypoint: ["/usr/local/bin/openbao-entrypoint"]
+    command: ["server", "-config=/bao/config/openbao.hcl"]
+    environment:
+      BAO_ADDR: https://openbao:8200
+      BAO_CACERT: /bao/tls-runtime/ca.crt
+    ports:
+      - "127.0.0.1:${OPENBAO_PORT:-18200}:8200"
+    expose:
+      - "8200"
+    volumes:
+      - openbao_data:/bao/data
+      - openbao_audit:/bao/audit
+      - ${OPENBAO_SNAPSHOT_DIR:-./data/openbao/snapshots}:/bao/snapshots
+      - ./openbao/config.hcl:/bao/config/openbao.hcl:ro
+      - ./openbao/entrypoint.sh:/usr/local/bin/openbao-entrypoint:ro
+      - ./data/openbao/tls/ca.crt:/bao/tls/ca.crt:ro
+      - ./data/openbao/tls/server.crt:/bao/tls/server.crt:ro
+      - ./data/openbao/tls/server.key:/bao/tls/server.key:ro
+    tmpfs:
+      - /bao/tls-runtime
+    networks:
+      - secrets_internal
+      - openbao_host
+    healthcheck:
+      test: ["CMD-SHELL", "rc=0; bao status -format=json >/dev/null 2>&1 || rc=$$?; test $$rc -eq 0 -o $$rc -eq 2"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
   prometheus:
     image: quay.io/prometheus/prometheus:v3.13.0
     profiles: ["observability"]
@@ -359,3 +413,11 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
+  openbao_data:
+  openbao_audit:
+  openbao_api_credentials:
+
+networks:
+  secrets_internal:
+    internal: true
+  openbao_host:

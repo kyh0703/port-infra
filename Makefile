@@ -35,15 +35,15 @@ ifeq ($(strip $(CHANGED_SERVICES)),)
 $(error CHANGED_SERVICES must not be empty)
 endif
 
-.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs tools-up tools-down observability-up observability-down observability-logs telephony-up telephony-provision telephony-health telephony-logs telephony-down db-ensure-user tailscale-direct dev-up dev-logs dev-stop test up down ps
+.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs openbao-tls openbao-up openbao-status openbao-init openbao-unseal openbao-snapshot openbao-app-role openbao-down openbao-logs tools-up tools-down observability-up observability-down observability-logs telephony-up telephony-provision telephony-health telephony-logs telephony-down db-ensure-user tailscale-direct dev-up dev-logs dev-stop test up down ps
 
 colima-start:
 	colima start --vm-type vz --runtime docker --cpus 4 --memory 6 --disk 60
 
 pull:
-	$(COMPOSE) pull $(PULL_SERVICES)
+	$(COMPOSE) pull $(PULL_SERVICES) openbao
 
-deploy: colima-start pull
+deploy: colima-start openbao-tls pull
 	$(COMPOSE) up -d
 	$(MAKE) health
 
@@ -90,11 +90,40 @@ dev-logs:
 dev-stop:
 	$(DEV_COMPOSE) stop api web
 
-infra-up:
-	$(COMPOSE) up -d $(INFRA_SERVICES)
+openbao-tls:
+	bash scripts/openbao-tls.sh
+	mkdir -p data/openbao/snapshots
+	chmod 700 data/openbao/snapshots
+
+openbao-up: openbao-tls
+	bash scripts/openbao.sh up
+
+openbao-status:
+	bash scripts/openbao.sh status
+
+openbao-init:
+	bash scripts/openbao.sh init
+
+openbao-unseal:
+	bash scripts/openbao.sh unseal
+
+openbao-snapshot:
+	bash scripts/openbao.sh snapshot
+
+openbao-app-role:
+	python3 scripts/openbao-app-role.py
+
+openbao-down:
+	bash scripts/openbao.sh down
+
+openbao-logs:
+	bash scripts/openbao.sh logs
+
+infra-up: openbao-tls
+	$(COMPOSE) up -d $(INFRA_SERVICES) openbao
 
 infra-down:
-	$(COMPOSE) stop $(INFRA_SERVICES)
+	$(COMPOSE) stop $(INFRA_SERVICES) openbao
 
 infra-logs:
 	$(COMPOSE) logs -f $(INFRA_SERVICES)
@@ -143,10 +172,11 @@ tailscale-direct:
 
 test:
 	python3 tests/test_internal_key_init.py
+	python3 -m unittest discover -s tests -p 'test_openbao*.py'
 	COMPOSE="$(COMPOSE)" bash tests/compose.sh
 	bash tests/commands.sh
 
-up:
+up: openbao-tls
 	$(COMPOSE) up -d
 
 down:

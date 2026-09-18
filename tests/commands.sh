@@ -64,6 +64,8 @@ grep -Fq 'telephony-provision:' Makefile
 grep -Fq 'telephony-health:' Makefile
 grep -Fq 'telephony-logs:' Makefile
 grep -Fq 'telephony-down:' Makefile
+grep -Fq 'openbao-app-role:' Makefile
+grep -Fq 'python3 scripts/openbao-app-role.py' Makefile
 grep -Fq 'scripts/sip-provision.sh' Makefile
 grep -Fq 'telephony' README.md
 grep -Fq 'sip-provision.sh' README.md

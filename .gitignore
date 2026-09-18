@@ -7,6 +7,8 @@
 **/dist/
 **/coverage/
 **/data/
+**/__pycache__/
+/data/openbao/
 .worktrees/
 
 .DS_Store

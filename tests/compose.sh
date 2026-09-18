@@ -26,6 +26,73 @@ jq -e '
 ' >/dev/null <<<"${config}"
 
 jq -e '
+  .services.openbao.image == "ghcr.io/openbao/openbao:2.6.2"
+  and .services.openbao.command == ["server", "-config=/bao/config/openbao.hcl"]
+  and .services.openbao.restart == "unless-stopped"
+  and (.services.openbao.ports | any(.host_ip == "127.0.0.1" and (.published | tonumber) == 18200 and .target == 8200))
+  and (.services.openbao.volumes | any(.type == "volume" and .source == "openbao_data" and .target == "/bao/data"))
+  and (.services.openbao.volumes | any(.type == "volume" and .source == "openbao_audit" and .target == "/bao/audit"))
+  and (.services.openbao.volumes | any(.target == "/bao/config/openbao.hcl" and .read_only == true))
+  and (.services.openbao.volumes | any(.target == "/bao/tls/ca.crt" and .read_only == true))
+  and (.services.openbao.volumes | any(.target == "/bao/tls/server.crt" and .read_only == true))
+  and (.services.openbao.volumes | any(.target == "/bao/tls/server.key" and .read_only == true))
+  and (.services.openbao.tmpfs | any(. == "/bao/tls-runtime"))
+  and (.services.openbao.networks | has("secrets_internal"))
+  and (.services.openbao.networks | has("openbao_host"))
+  and (.services.api.networks | has("secrets_internal"))
+  and (.services."api-migrator".networks | has("secrets_internal"))
+  and (.services.api.networks | has("openbao_host") | not)
+  and (.services."api-migrator".networks | has("openbao_host") | not)
+  and .networks.secrets_internal.internal == true
+  and .networks.openbao_host.internal != true
+  and .services.openbao.environment.BAO_ADDR == "https://openbao:8200"
+  and .services.openbao.environment.BAO_CACERT == "/bao/tls-runtime/ca.crt"
+  and .services.api.environment.OPENBAO_ADDR == "https://openbao:8200"
+  and .services.api.environment.OPENBAO_CA_CERT_FILE == "/run/openbao-ca/ca.crt"
+  and .services.api.environment.OPENBAO_ROLE_ID_FILE == "/run/openbao/api-role-id"
+  and .services.api.environment.OPENBAO_SECRET_ID_FILE == "/run/openbao/api-secret-id"
+  and .services."api-migrator".environment.OPENBAO_ADDR == "https://openbao:8200"
+  and .services."api-migrator".environment.OPENBAO_CA_CERT_FILE == "/run/openbao-ca/ca.crt"
+  and .services."api-migrator".environment.OPENBAO_ROLE_ID_FILE == "/run/openbao/api-role-id"
+  and .services."api-migrator".environment.OPENBAO_SECRET_ID_FILE == "/run/openbao/api-secret-id"
+  and (.services.api.volumes | any(.target == "/run/openbao-ca/ca.crt" and .read_only == true))
+  and (.services."api-migrator".volumes | any(.target == "/run/openbao-ca/ca.crt" and .read_only == true))
+  and (.services.api.volumes | any(.type == "volume" and .source == "openbao_api_credentials" and .target == "/run/openbao" and .read_only == true))
+  and (.services."api-migrator".volumes | any(.type == "volume" and .source == "openbao_api_credentials" and .target == "/run/openbao" and .read_only == true))
+  and (.services.api.environment | has("OPENBAO_CACERT") | not)
+  and (.services."api-migrator".environment | has("OPENBAO_CACERT") | not)
+' >/dev/null <<<"${config}"
+
+grep -Fq 'tls_disable     = false' openbao/config.hcl
+grep -Fq 'tls_key_file    = "/bao/tls-runtime/server.key"' openbao/config.hcl
+grep -Fq 'storage "raft"' openbao/config.hcl
+grep -Fq 'file_path = "/bao/audit/audit.log"' openbao/config.hcl
+grep -Fq 'chown -R openbao:openbao /bao/data /bao/audit' openbao/entrypoint.sh
+grep -Fq 'cp /bao/tls/server.key /bao/tls-runtime/server.key' openbao/entrypoint.sh
+grep -Fq 'chmod 600 /bao/tls-runtime/server.key' openbao/entrypoint.sh
+grep -Fq 'su-exec openbao:openbao bao' openbao/entrypoint.sh
+grep -Fq 'DNS:openbao' scripts/openbao-tls.sh
+grep -Fq 'DNS:localhost' scripts/openbao-tls.sh
+grep -Fq 'IP:127.0.0.1' scripts/openbao-tls.sh
+grep -Fq '${OPENBAO_SNAPSHOT_DIR:-./data/openbao/snapshots}:/bao/snapshots' compose.yml
+grep -Fq 'export OPENBAO_SNAPSHOT_DIR=' scripts/openbao.sh
+grep -Fq 'ln -- "${temporary_output}" "${output_path}"' scripts/openbao.sh
+! grep -Fq 'mv -- "${temporary_output}" "${output_path}"' scripts/openbao.sh
+! grep -Eiq -- '(^|[[:space:]])-dev([[:space:]]|$)' openbao/config.hcl compose.yml scripts/openbao*.sh
+if grep -Eq 'operator (init|unseal|raft snapshot save).*(KEY|TOKEN|key|token)=' scripts/openbao*.sh; then
+  echo 'OpenBao secret material must not be placed in helper command arguments' >&2
+  exit 1
+fi
+
+test -f openbao/policies/api-pii-envelope.hcl
+grep -Fq 'path "secret/data/port/api/pii-envelope"' openbao/policies/api-pii-envelope.hcl
+grep -Fq 'path "transit/decrypt/port-pii-kek"' openbao/policies/api-pii-envelope.hcl
+grep -Fq 'path "auth/token/revoke-self"' openbao/policies/api-pii-envelope.hcl
+grep -Fq 'capabilities = ["read"]' openbao/policies/api-pii-envelope.hcl
+grep -Fq 'capabilities = ["update"]' openbao/policies/api-pii-envelope.hcl
+! grep -Eq 'path "[^"]*\*|wildcard|export|datakey|write|create|delete|list|patch|sudo' openbao/policies/api-pii-envelope.hcl
+
+jq -e '
   .services.api.image == "ghcr.io/kyh0703/port-api:dev"
   and .services.web.image == "ghcr.io/kyh0703/port-web:dev"
   and .services.rag.image == "ghcr.io/kyh0703/port-rag:dev"
@@ -74,7 +141,7 @@ jq -e '
 
 jq -e '
   . as $root |
-  (["DATABASE_URL", "REDIS_URL", "RAG_URL", "RAG_RETRIEVAL_CAPABILITY_SECRET", "WEB_ORIGIN", "AUTH_PASSWORD_RESET_SECRET", "AUTH_EMAIL_VERIFICATION_SECRET", "AUTH_RATE_LIMIT_SECRET", "USER_EMAIL_LOOKUP_KEY", "WEB_CHAT_RESUME_TOKEN_SECRET", "AUTH_SESSION_COOKIE_SECURE", "AUTH_SESSION_TTL_SECONDS", "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY", "USER_PII_ENCRYPTION_KEY"] | all(.[]; $root.services.api.environment[.] != null))
+  (["DATABASE_URL", "REDIS_URL", "RAG_URL", "RAG_RETRIEVAL_CAPABILITY_SECRET", "WEB_ORIGIN", "AUTH_PASSWORD_RESET_SECRET", "AUTH_EMAIL_VERIFICATION_SECRET", "AUTH_RATE_LIMIT_SECRET", "WEB_CHAT_RESUME_TOKEN_SECRET", "AUTH_SESSION_COOKIE_SECURE", "AUTH_SESSION_TTL_SECONDS", "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY"] | all(.[]; $root.services.api.environment[.] != null))
   and ([.services.api.environment | keys[] | select(test("KEYCLOAK|KC_"))] | length == 0)
   and .services.api.environment.WEB_ORIGIN == "http://macbookpro:3000"
   and .services.api.environment.LIVEKIT_URL == "ws://macbookpro:7880"
@@ -87,9 +154,9 @@ jq -e '
   and .services."voice-agent".environment.LIVEKIT_URL != null
   and .services."voice-agent".environment.LIVEKIT_API_KEY != null
   and .services."voice-agent".environment.LIVEKIT_API_SECRET != null
+  and (.services.api.environment | has("USER_EMAIL_LOOKUP_KEY") | not)
+  and (.services.api.environment | has("USER_PII_ENCRYPTION_KEY") | not)
 ' >/dev/null <<<"${config}"
-
-jq -e '.services.api.environment.USER_EMAIL_LOOKUP_KEY | @base64d | length == 32' >/dev/null <<<"${config}"
 
 jq -e '
   .services.livekit.restart == "unless-stopped"
@@ -123,6 +190,8 @@ test -f config/voice-agent.env.example
 test -f config/aggregator.env.example
 test -f config/adaptor.env.example
 test -f config/voice-agent.local.example.yaml
+! grep -Fq 'USER_EMAIL_LOOKUP_KEY=' config/api.env.example
+! grep -Fq 'USER_PII_ENCRYPTION_KEY=' config/api.env.example
 grep -Fq '${VOICE_AGENT_CONFIG_FILE:-./config/voice-agent.local.example.yaml}' compose.yml
 grep -Fq 'postgres-app-init' compose.yml
 grep -Fq 'aggregator' postgres/init/01-ensure-port-user.sh
@@ -130,9 +199,7 @@ grep -Fq 'aggregator' postgres/init/01-ensure-port-user.sh
 grep -Fq '"macbookpro:host-gateway"' compose.yml
 
 api_voice_key=$(jq -r '.services.api.environment.VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY' <<<"${config}")
-api_pii_key=$(jq -r '.services.api.environment.USER_PII_ENCRYPTION_KEY' <<<"${config}")
 [[ "$(printf '%s' "${api_voice_key}" | openssl base64 -d -A | wc -c | tr -d ' ')" == "32" ]]
-[[ "$(printf '%s' "${api_pii_key}" | openssl base64 -d -A | wc -c | tr -d ' ')" == "32" ]]
 
 jq -e '
   .services.redis.ports[0].published == "6379"
