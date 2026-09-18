@@ -1,0 +1,34 @@
+name: office-api-mock
+
+services:
+  office-api-mock:
+    image: office-api-mock:local
+    build:
+      context: ${OFFICE_API_MOCK_SOURCE_DIR:-../../office/api-mock}
+    environment:
+      DB_PATH: /data/app.db
+      SEED_MODE: ${SEED_MODE:-if-empty}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+    ports:
+      - "${OFFICE_API_MOCK_ADDRESS:-127.0.0.1}:${OFFICE_API_MOCK_PORT:-18080}:8080"
+    volumes:
+      - office_api_mock_data:/data
+    networks:
+      infra_default:
+        aliases:
+          - office-api-mock.test
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  office_api_mock_data:
+
+networks:
+  infra_default:
+    external: true
+    name: ${OFFICE_API_MOCK_NETWORK:-infra_default}

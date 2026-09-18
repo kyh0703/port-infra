@@ -7,3 +7,5 @@ bootstrap:
   REDIS_URL: redis://redis:6379
 metrics:
   METRICS_PORT: 9091
+apiTools:
+  API_TOOL_ALLOWED_PRIVATE_ORIGINS: http://office-api-mock.test:8080
