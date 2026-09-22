@@ -231,6 +231,13 @@ API와 Voice Agent는
 커스텀 설정은 example 파일을 local 파일로 복사한 뒤 root `.env`의
 `API_ENV_FILE`과 `VOICE_AGENT_ENV_FILE`을 복사한 경로로 지정한다.
 
+API의 `WEB_ORIGIN`은 인증 리다이렉트에 사용하는 canonical 웹 주소이며, 로컬 Compose에서는
+`http://macbookpro:3000`을 유지한다. `WEB_ALLOWED_ORIGINS`는 canonical origin 외에 CORS와
+CSRF 검사에서 허용할 정확한 origin을 쉼표로 구분한 목록이다. 로컬 설정/example은
+`http://localhost:3000,http://localhost:3010`을 명시하며, 다른 localhost 포트나 wildcard를
+자동 허용하지 않는다. 추가 origin이 필요 없는 환경에서는 이 값을 비워 두거나 생략한다.
+허용 목록은 Origin 검사를 비활성화하지 않으며, CSRF 보호 요청에 Origin이 없으면 거부한다.
+
 LiveKit dev server의 기본 개발 credential은 `devkey`/`secret`이며 운영 credential로
 사용하지 않는다.
 
