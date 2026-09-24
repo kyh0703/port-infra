@@ -47,11 +47,11 @@ deploy: colima-start openbao-tls pull
 	$(COMPOSE) up -d
 	$(MAKE) health
 
+# Each pull of a moving tag (:dev, :migrator) leaves the previous image dangling; prune it so the Colima disk does not fill.
 recreate:
 	$(COMPOSE) pull $(RECREATE_PULL_SERVICES)
 	$(MIGRATOR_RECREATE)
 	$(COMPOSE) up -d --no-deps --force-recreate $(CHANGED_SERVICES)
-	# Each pull of a moving tag (:dev, :migrator) leaves the previous image dangling; drop it so the Colima disk does not fill.
 	docker image prune -f
 
 health:
