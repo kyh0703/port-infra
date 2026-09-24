@@ -51,6 +51,8 @@ recreate:
 	$(COMPOSE) pull $(RECREATE_PULL_SERVICES)
 	$(MIGRATOR_RECREATE)
 	$(COMPOSE) up -d --no-deps --force-recreate $(CHANGED_SERVICES)
+	# Each pull of a moving tag (:dev, :migrator) leaves the previous image dangling; drop it so the Colima disk does not fill.
+	docker image prune -f
 
 health:
 	@set -eu; \
