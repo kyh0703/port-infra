@@ -118,6 +118,7 @@ services:
       - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf:ro
       - ./asterisk/rtp.conf:/etc/asterisk/rtp.conf:ro
       - ./asterisk/modules.conf:/etc/asterisk/modules.conf:ro
+      - ./asterisk/local:/etc/asterisk/local:ro
     healthcheck:
       test: ["CMD-SHELL", "asterisk -rx 'pjsip show endpoint livekit' | grep -q 'Endpoint:  livekit'"]
       interval: 10s
@@ -161,12 +162,14 @@ services:
       OPENBAO_CA_CERT_FILE: /run/openbao-ca/ca.crt
       OPENBAO_ROLE_ID_FILE: /run/openbao/api-role-id
       OPENBAO_SECRET_ID_FILE: /run/openbao/api-secret-id
+      VOICE_PREVIEW_CACHE_DIR: /app/data/voice-previews
     extra_hosts:
       - "macbookpro:host-gateway"
       - "host.docker.internal:host-gateway"
     volumes:
       - openbao_api_credentials:/run/openbao:ro
       - ./data/openbao/tls/ca.crt:/run/openbao-ca/ca.crt:ro
+      - voice_preview_cache:/app/data/voice-previews
     networks:
       - default
       - secrets_internal
@@ -419,6 +422,7 @@ volumes:
   openbao_data:
   openbao_audit:
   openbao_api_credentials:
+  voice_preview_cache:
 
 networks:
   secrets_internal:

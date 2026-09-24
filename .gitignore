@@ -17,3 +17,7 @@ config/*.env
 config/*.local.yaml
 !config/*.env.example
 !config/*.local.example.yaml
+
+asterisk/local/*
+!asterisk/local/.gitkeep
+pjsua/artifacts/

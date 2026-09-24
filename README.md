@@ -231,8 +231,42 @@ API와 Voice Agent는
 커스텀 설정은 example 파일을 local 파일로 복사한 뒤 root `.env`의
 `API_ENV_FILE`과 `VOICE_AGENT_ENV_FILE`을 복사한 경로로 지정한다.
 
+API의 `WEB_ORIGIN`은 인증 리다이렉트에 사용하는 canonical 웹 주소이며, 로컬 Compose에서는
+`http://macbookpro:3000`을 유지한다. `WEB_ALLOWED_ORIGINS`는 canonical origin 외에 CORS와
+CSRF 검사에서 허용할 정확한 origin을 쉼표로 구분한 목록이다. 로컬 설정/example은
+`http://localhost:3000,http://localhost:3010`을 명시하며, 다른 localhost 포트나 wildcard를
+자동 허용하지 않는다. 추가 origin이 필요 없는 환경에서는 이 값을 비워 두거나 생략한다.
+허용 목록은 Origin 검사를 비활성화하지 않으며, CSRF 보호 요청에 Origin이 없으면 거부한다.
+
 LiveKit dev server의 기본 개발 credential은 `devkey`/`secret`이며 운영 credential로
 사용하지 않는다.
+
+## 음성 미리듣기 저장과 생성 제한
+
+API는 생성된 샘플을 `voice_preview_cache` named volume의 `/app/data/voice-previews`에
+저장한다. 컨테이너 재생성 후에도 재사용하며 자동 만료는 없다. 볼륨 사용량을 모니터링하고
+백업 대상에 포함한다. 브라우저 응답은 계속 `private, no-store`이며 서버에서만 재사용한다.
+컨테이너 없이 실행할 때는 `VOICE_PREVIEW_CACHE_DIR`로 경로를 지정한다(기본 `data/voice-previews`).
+개발 Compose는 root로 실행되므로 별도 `voice_preview_cache_dev` 볼륨을 같은 경로에
+마운트한다. 일반 runner(UID 1001)의 캐시와 섞지 않아 `0600` 파일의 소유권 충돌을 방지한다.
+
+- 매 요청마다 음성 활성 상태·모델 호환성·커스텀 음성 소유권을 확인한다.
+- 카탈로그 샘플은 공유하고 커스텀 샘플은 소유자별로 분리한다.
+- 공급자·모델·음성 ID·언어·샘플 문구/형식 버전이 달라지면 새로 생성한다.
+- 같은 샘플의 동시 요청은 Redis lease로 합성 한 번만 수행한다. 한 브라우저의 취소는
+  다른 요청이나 진행 중인 저장을 취소하지 않는다. 실패한 생성은 음성 파일로 저장하지 않는다.
+  서버 간 대기 요청에는 작업 소유자별 실패 원인을 Redis에 60초 보관해 전달한다.
+- 새 생성 시도만 60초 고정 창으로 제한한다. 기본 사용자 10회, 전체 60회이며
+  `VOICE_PREVIEW_USER_GENERATION_LIMIT`, `VOICE_PREVIEW_GLOBAL_GENERATION_LIMIT`로 조정한다.
+  초과 요청은 HTTP 429를 반환한다. 저장된 샘플 재생은 이 한도를 소모하지 않는다.
+  다른 사용자의 개인 한도 초과는 전파하지 않는다. 그 경우에만 대기 사용자의 한도로
+  생성 진입을 다시 시도하며, 공급자 실패를 자동 재합성하지 않는다.
+  요청과 공유 생성 작업은 각각 20초 제한을 적용한다. Redis·파일 I/O 대기도 제한하며,
+  락 해제는 별도 1초 제한으로 처리해 이미 저장한 샘플의 응답을 막지 않는다.
+  시간 초과 뒤 늦게 획득한 락은 소유자 토큰을 확인해 해제하고 합성을 시작하지 않는다.
+- Redis/저장소 장애 때 캐시 미스를 무제한 합성으로 우회하지 않는다. 생성 제한과 lock은
+  Redis를 사용하므로 API replica들은 같은 Redis와 **같은 캐시 파일시스템**을 공유해야 한다.
+  다른 호스트의 독립 local volume을 같은 공유 저장소로 간주하면 안 된다.
 
 ## 로컬 SIP/전화 테스트 스택
 
@@ -256,6 +290,62 @@ inbound trunk에 번호와 Asterisk 경로를 바인딩하고, outbound transfer
 Echo 테스트 목적의 Asterisk 내선 `600`은 로컬 RTP 범위에서 동작한다. SIP 포트는 loopback에만
 바인딩된 `15090`(LiveKit SIP), `15060`(Asterisk), LiveKit SIP health는 `18090`이며 필요하면 `.env`에서
 변경할 수 있다. 로컬 inbound 테스트 번호는 `2000`이다. 종료할 때는 `make telephony-down`을 사용한다.
+
+### PJSUA CLI 테스트 단말
+
+Mac용 CLI는 `brew install pjproject`로 설치한다. 현재 Colima의 loopback UDP 전달 경로에
+의존하지 않도록 반복 통화 테스트는 Asterisk와 같은 `infra_default` Docker 네트워크에서 실행한다.
+Docker 이미지는 공식 PJSIP 2.17 소스를 SHA-256 검증 후 빌드한다.
+
+```bash
+make pjsua-build
+make pjsua-setup
+```
+
+`pjsua-setup`은 고객 `1001`, 상담원 `1002`의 임의 비밀번호와 설정을 `asterisk/local/`에
+생성한다. 재실행 시 비밀번호를 유지한다. 이 디렉터리의 생성 파일과 `pjsua/artifacts/`는
+Git에서 제외된다. 최초 설정은 Asterisk 컨테이너를 재생성하므로 진행 중인 테스트 통화를
+종료한 뒤 실행한다. 이후에는 계정 설정을 reload하며, 나머지 서비스와 volume은 유지한다.
+
+두 터미널에서 각각 실행한다.
+
+```bash
+# 상담원: 수신 통화 자동 응답
+make pjsua-agent
+
+# 고객: CLI에서 아래 call 명령 사용
+make pjsua-caller
+```
+
+```text
+call new sip:600@asterisk     # 에코 테스트
+call dump_q                  # RTP 송수신 통계
+call hangup
+call new sip:601@asterisk     # DTMF 4자리 수신 테스트
+call d_2833 1234
+call hangup
+call new sip:1002@asterisk    # 상담원 내선 통화
+call hangup
+shutdown
+```
+
+위 주석은 설명용이며 실제 CLI에는 `#` 앞의 명령만 입력한다. `601`에서 받은 숫자는
+Asterisk 로그의 `PJSUA_DTMF_RESULT=1234`로 확인한다. SIP 인증, G.711 RTP,
+RFC 4733 DTMF를 실제 전송한다. 기본 `--null-audio` 모드는 Mac 마이크와 스피커를 사용하지 않는다.
+WAV 파일은 `pjsua/artifacts/`에 넣고 컨테이너의 `/artifacts/` 경로로 재생·녹음할 수 있다.
+
+```bash
+bash scripts/pjsua.sh caller --play-file=/artifacts/input.wav --auto-play \
+  --rec-file=/artifacts/echo.wav --auto-rec sip:600@asterisk
+# 거절 / 수동 응답(무응답 시나리오): make pjsua-agent 대신 하나만 실행
+bash scripts/pjsua.sh agent --auto-answer=486
+bash scripts/pjsua.sh agent
+```
+
+`82000`은 기존 LiveKit inbound `2000`으로 연결한다. 실제 AI 통화에는 API의 전화번호·publication
+바인딩과 Worker 설정이 별도로 필요하다. LiveKit outbound에서 `1001`/`1002`를 호출하면
+해당 등록 단말로 연결하며, 다른 번호의 기존 에코 경로는 유지한다.
+단말은 `shutdown`으로 종료하면 컨테이너도 제거된다. 로컬 SIP 테스트는 통신사 PSTN 검증을 포함하지 않는다.
 
 로컬 Compose에서는 adaptor의 PAT identity integration을 비활성화한다. identity endpoint는
 HTTPS endpoint를 제공하는 환경에서만 local env로 opt-in하며, `PUBLIC_BASE_URL`은

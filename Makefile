@@ -173,6 +173,21 @@ telephony-logs:
 telephony-down:
 	$(COMPOSE) --profile telephony stop livekit-sip asterisk livekit-cli
 
+.PHONY: pjsua-build pjsua-setup pjsua-caller pjsua-agent
+pjsua-build:
+	docker --context "$${DOCKER_CONTEXT:-colima}" build -t port-pjsua:2.17 pjsua
+
+pjsua-setup:
+	python3 scripts/pjsua-setup.py
+	$(COMPOSE) --profile telephony up -d --no-deps --wait asterisk
+	$(COMPOSE) --profile telephony exec -T asterisk asterisk -rx 'pjsip reload'
+
+pjsua-caller:
+	bash scripts/pjsua.sh caller
+
+pjsua-agent:
+	bash scripts/pjsua.sh agent --auto-answer=200
+
 db-ensure-user:
 	$(COMPOSE) up -d postgres
 	$(COMPOSE) exec -T --user postgres postgres sh /docker-entrypoint-initdb.d/01-ensure-port-user.sh

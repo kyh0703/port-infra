@@ -13,6 +13,7 @@ services:
       - ../api:/app
       - api_node_modules:/app/node_modules
       - api_pnpm_store:/pnpm/store
+      - voice_preview_cache_dev:/app/data/voice-previews
 
   web:
     image: port-web-dev-runtime:local
@@ -38,3 +39,4 @@ volumes:
   api_pnpm_store:
   web_pnpm_store:
   web_next_cache:
+  voice_preview_cache_dev:
