@@ -56,6 +56,10 @@ services:
     environment:
       # SIP consultation restores only microphone tracks muted by the API.
       LIVEKIT_CONFIG: |
+        rtc:
+          use_external_ip: false
+          node_ip: ${LIVEKIT_NODE_IP:-127.0.0.1}
+          advertise_internal_ip: true
         room:
           enable_remote_unmute: true
     restart: unless-stopped
