@@ -50,12 +50,12 @@ Compose project name은 `infra`로 고정하므로 worktree가 달라도 같은 
 
 ### RAG 관리자 임베딩 키
 
-- 기본 RAG 설정은 `EMBEDDER=openai`다. 관리자 `/admin/keys`에서 OpenAI 키를 등록한다.
+- RAG는 관리자 `/admin/keys`에 등록한 OpenAI 키를 항상 사용한다. 임베더 선택 환경변수는 없다.
 - RAG의 `API_INTERNAL_BASE_URL`은 `http://api:8000/api/v1`이며, 기존
   `INTERNAL_SERVER_KEY`로 인증해 현재 관리자 키를 조회한다. 별도 OpenAI 키 환경변수는 사용하지 않는다.
 - API부터 갱신한 뒤 RAG를 갱신한다. 키 누락·조회 실패는 오류로 처리하며 fake로 우회하지 않는다.
 - 관리자 키 교체는 다음 임베딩 요청부터 반영된다. `fake`로 색인한 기존 문서는
-  실제 임베딩으로 재색인해야 한다. 명시적인 `fake` 모드는 격리된 개발 검사에만 사용한다.
+  실제 임베딩으로 재색인해야 한다. 가짜 임베더는 단위 테스트에만 남기며 운영 이미지에는 포함하지 않는다.
 
 ## 소스 마운트 개발 모드
 
