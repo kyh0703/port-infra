@@ -356,9 +356,10 @@ bash scripts/pjsua.sh agent
 해당 등록 단말로 연결하며, 다른 번호의 기존 에코 경로는 유지한다.
 단말은 `shutdown`으로 종료하면 컨테이너도 제거된다. 로컬 SIP 테스트는 통신사 PSTN 검증을 포함하지 않는다.
 
-로컬 Compose에서는 adaptor의 PAT identity integration을 비활성화한다. identity endpoint는
-HTTPS endpoint를 제공하는 환경에서만 local env로 opt-in하며, `PUBLIC_BASE_URL`은
-`http://macbookpro:3002`로 고정한다.
+로컬 Compose는 `adaptor-api-tls` Caddy proxy가 API 앞에서 내부 CA 기반 HTTPS를 제공한다.
+Adaptor는 해당 CA를 `NODE_EXTRA_CA_CERTS`로 신뢰하고
+`https://adaptor-api-tls/api/v1/access-tokens/identity`에서 PAT identity를 검증한다.
+`PUBLIC_BASE_URL`은 `http://macbookpro:3002`로 유지한다.
 
 `make health`는 각 컨테이너의 liveness smoke와 LiveKit TCP 포트 검사를 수행한다. Voice Agent의 metrics endpoint는
 process liveness만 보장하며 LiveKit registration은 logs와 별도 manual smoke로 확인한다.

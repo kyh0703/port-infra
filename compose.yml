@@ -325,14 +325,53 @@ services:
       - ${AGGREGATOR_ENV_FILE:-./config/aggregator.env.example}
     ports:
       - "${AGGREGATOR_PORT:-3001}:3000"
+  adaptor-api-tls:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        ca_dir=/data/caddy/pki/authorities/local
+        ready=/data/adaptor-ca-ready
+        rm -f "$$ready"
+        caddy reverse-proxy \
+          --from https://adaptor-api-tls \
+          --to http://api:8000 \
+          --internal-certs \
+          --disable-redirects &
+        caddy_pid=$$!
+        trap 'kill -TERM "$$caddy_pid"; wait "$$caddy_pid"' TERM INT
+        until [ -s "$$ca_dir/root.crt" ]; do
+          kill -0 "$$caddy_pid"
+          sleep 1
+        done
+        chmod 0755 /data/caddy /data/caddy/pki /data/caddy/pki/authorities "$$ca_dir"
+        chmod 0644 "$$ca_dir/root.crt"
+        touch "$$ready"
+        wait "$$caddy_pid"
+    volumes:
+      - adaptor_api_tls:/data
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /data/adaptor-ca-ready && wget --no-check-certificate -q -O /dev/null https://adaptor-api-tls/api/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
   adaptor:
     image: ghcr.io/kyh0703/port-adaptor:dev
     restart: unless-stopped
     depends_on:
-      api:
-        condition: service_started
+      adaptor-api-tls:
+        condition: service_healthy
     env_file:
       - ${ADAPTOR_ENV_FILE:-./config/adaptor.env.example}
+    volumes:
+      - adaptor_api_tls:/run/caddy:ro
     ports:
       - "3002:3000"
     healthcheck:
@@ -427,6 +466,7 @@ volumes:
   openbao_audit:
   openbao_api_credentials:
   voice_preview_cache:
+  adaptor_api_tls:
 
 networks:
   secrets_internal:
