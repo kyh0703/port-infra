@@ -1,0 +1,58 @@
+# Standalone collector stack: never recreates the application services.
+name: infra-logs
+
+services:
+  docker-log-proxy:
+    image: nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+    restart: unless-stopped
+    entrypoint: [nginx, -g, "daemon off;"]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp
+    volumes:
+      - ${ALLOY_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - ./config/alloy/docker-proxy.conf:/etc/nginx/nginx.conf:ro
+    networks: [docker_logs]
+    mem_limit: 64m
+
+  alloy:
+    image: grafana/alloy:v1.14.0@sha256:f50931848bd8178774521767bb46b905e1a081301950ff28d7623c9db7c01076
+    # Root owns the persistent volume and reads a host-owned 0600 secret.
+    # Only DAC_OVERRIDE permits traversal/read of image and host-owned paths.
+    user: "0:0"
+    restart: unless-stopped
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=127.0.0.1:12345
+      - /etc/alloy/config.alloy
+    depends_on: [docker-log-proxy]
+    environment:
+      GRAFANA_CLOUD_LOGS_URL: ${GRAFANA_CLOUD_LOGS_URL:?Set the Loki push URL}
+      GRAFANA_CLOUD_LOGS_USER: ${GRAFANA_CLOUD_LOGS_USER:?Set the Logs tenant ID}
+      ALLOY_TARGET_PROJECT: ${ALLOY_TARGET_PROJECT:-infra}
+      ALLOY_ENVIRONMENT: ${ALLOY_ENVIRONMENT:?Set local, staging, or production}
+    secrets: [grafana_logs_token]
+    volumes:
+      - ./config/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy/data
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [DAC_OVERRIDE]
+    networks: [docker_logs, egress]
+    mem_limit: 256m
+    cpus: 0.5
+
+secrets:
+  grafana_logs_token:
+    file: ${GRAFANA_CLOUD_LOGS_TOKEN_FILE:?Set the absolute token file path}
+
+volumes:
+  alloy_data:
+
+networks:
+  docker_logs:
+    internal: true
+  egress:

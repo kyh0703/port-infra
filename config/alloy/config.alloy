@@ -1,0 +1,67 @@
+logging {
+  level = "info"
+}
+
+local.file "logs_token" {
+  filename  = "/run/secrets/grafana_logs_token"
+  is_secret = true
+}
+
+discovery.docker "apps" {
+  host             = "http://docker-log-proxy:2375"
+  refresh_interval = "10s"
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=" + sys.env("ALLOY_TARGET_PROJECT")]
+  }
+}
+
+discovery.relabel "apps" {
+  targets = discovery.docker.apps.targets
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "api|voice-agent"
+    action        = "keep"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_oneoff"]
+    regex         = "(?i:true)"
+    action        = "drop"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service_name"
+  }
+}
+
+loki.source.docker "apps" {
+  host             = "http://docker-log-proxy:2375"
+  targets          = discovery.relabel.apps.output
+  refresh_interval = "10s"
+  labels           = { environment = sys.env("ALLOY_ENVIRONMENT") }
+  forward_to       = [loki.process.apps.receiver]
+}
+
+loki.process "apps" {
+  // Drop verbose Pino levels; keep info/warn/error and non-JSON startup failures.
+  // Read only the top-level severity; nested tool payloads must not drop info logs.
+  stage.json {
+    expressions = { log_level = "level" }
+  }
+  stage.drop {
+    source              = "log_level"
+    expression          = "^(10|20|trace|debug)$"
+    drop_counter_reason = "verbose"
+  }
+  forward_to = [loki.write.cloud.receiver]
+}
+
+loki.write "cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_LOGS_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_LOGS_USER")
+      password = local.file.logs_token.content
+    }
+  }
+}

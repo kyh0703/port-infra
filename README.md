@@ -3,6 +3,100 @@
 로컬 개발에 필요한 상태 저장 서비스와 애플리케이션을 Docker Compose로 실행한다.
 애플리케이션은 각 저장소가 GHCR에 발행한 `:dev` 이미지를 사용한다.
 
+## Grafana Cloud 로그 수집 (선택)
+
+`compose.logs.yml`은 독립된 `infra-logs` 프로젝트로 Alloy와 Docker 로그 프록시만
+실행한다. 기존 애플리케이션의 Compose 파일 체인·이미지·환경변수는 변경하지 않는다.
+기존 `compose.yml`과 병합하거나 `make deploy`로 실행하지 않는다. Sentry 설정도 유지한다.
+
+### 연결 정보 준비
+
+1. Grafana Cloud 스택의 Logs 연결 안내에서 `/loki/api/v1/push` URL과
+   Logs tenant ID를 확인한다. 해당 스택의 `logs:write` 권한만 가진 토큰을 생성한다.
+2. `config/grafana-logs.env.example`을 `config/grafana-logs.env`로 복사하고
+   URL·tenant ID·실제 환경명·토큰 파일의 절대 경로를 설정한다.
+3. 토큰은 Git 밖의 파일에 **토큰 문자열만, 끝 줄바꿈 없이** 저장하고 권한을
+   `chmod 600 /absolute/path/to/token`으로 제한한다. 토큰은 env 파일에 넣지 않는다.
+   macOS/Colima에서는 Docker VM에 공유되는 홈 디렉터리 아래 경로를 사용한다.
+   `/tmp`는 VM에서 같은 경로로 보이지 않을 수 있다.
+
+`ALLOY_TARGET_PROJECT`의 기본값은 `infra`다. `ALLOY_ENVIRONMENT`는 필수이며
+로컬에서는 `local`, 운영에서는 `production` 등 실제 환경에 맞게 설정한다.
+`ALLOY_DOCKER_SOCKET`은 Docker daemon 호스트 안의 socket 경로다.
+Colima의 macOS CLI socket 경로가 아니라 기본 `/var/run/docker.sock`을 사용한다.
+
+### 실행·검증·중지
+
+infra 저장소 또는 해당 작업 worktree에서 실행한다.
+
+```bash
+cp config/grafana-logs.env.example config/grafana-logs.env
+# 위 파일의 연결 정보를 수정하고 토큰 파일을 준비한 뒤:
+docker compose --env-file config/grafana-logs.env -f compose.logs.yml config --quiet
+docker compose --env-file config/grafana-logs.env -f compose.logs.yml run --rm --no-deps \
+  alloy validate /etc/alloy/config.alloy
+docker compose --env-file config/grafana-logs.env -f compose.logs.yml up -d
+docker compose --env-file config/grafana-logs.env -f compose.logs.yml logs --tail=100 alloy docker-log-proxy
+```
+
+Alloy 설정 문법 검증만으로 인증·파일 접근·실제 전송이 검증되지는 않는다.
+API 요청과 테스트 통화를 발생시킨 뒤 Cloud Explore의 Logs 데이터소스에서 확인한다.
+
+```logql
+{service_name=~"api|voice-agent", environment="local"}
+```
+
+```logql
+{service_name=~"api|voice-agent", environment="local"}
+  | json
+  | conversationId="실제-통화-ID"
+```
+
+동일 ID가 기록된 로그만 검색된다. `conversationId`·`executionId`·`requestId`는
+JSON 본문에 유지하며 인덱스 라벨로 만들지 않는다. 환경명이 다르면 쿼리도 바꾼다.
+
+```bash
+# 수집 중지. 앱과 수집 위치 볼륨은 유지한다.
+docker compose --env-file config/grafana-logs.env -f compose.logs.yml stop
+# 다시 시작
+docker compose --env-file config/grafana-logs.env -f compose.logs.yml up -d
+```
+
+`alloy_data`는 읽은 위치를 보존한다. 운영에서 `down -v`로 지우지 않는다.
+전송 장애·Docker 로그 회전 중 무손실 보관을 보장하는 큐는 아니다.
+Alloy 로그의 전송 실패와 Cloud 사용량을 함께 확인한다.
+
+### 수집 범위와 보안
+
+- 지정 프로젝트의 `api`·`voice-agent`만 수집한다. 일회성 `compose run` 컨테이너,
+  Web·DB·LiveKit·Alloy 로그는 제외한다. 호스트가 여러 대면 호스트별 수집기가 필요하다.
+- 최상위 Pino `level`이 `10`·`20` 또는 문자열 `trace`·`debug`인 로그는 버린다.
+  info 이상과 JSON이 아닌 시작 오류는 보존한다. 기존 Docker 로그 이력도 최초 실행 때
+  읽힐 수 있으므로 활성화 전에 과거 로그의 민감정보도 확인한다.
+- **본문은 원본 그대로 전송한다. 범용 개인정보 마스킹이나 health 요청 제거는 하지 않는다.**
+  토큰·Authorization·Cookie·전화번호·대화 원문·도구 인자/응답이 원본에 기록되면
+  Cloud에도 전송된다. 운영 활성화 전 앱 로거의 redaction을 확인한다.
+- Cloud 토큰은 Compose file secret으로 Alloy에만 마운트한다. 환경변수에 토큰을 넣지 않는다.
+  로컬 Compose secrets는 암호화된 secret 저장소가 아니라 파일 마운트다.
+- Docker socket을 가진 프록시는 강한 권한을 가진다. `:ro`는 Docker API 권한을 제한하지 않는다.
+  프록시는 읽기용 discovery·inspect·logs 경로만 허용하고 변경 요청·exec·archive를 차단한다.
+  **inspect는 컨테이너 환경변수를 읽을 수 있다.** 수집 대상 필터는 Alloy 설정이지
+  프록시의 컨테이너별 인가가 아니다. 내부 네트워크를 신뢰 경계로 유지한다.
+- 두 서비스 모두 호스트 포트를 공개하지 않는다. 프록시는 내부 네트워크에만,
+  Alloy만 별도의 외부 전송 네트워크에 연결한다. Alloy는 read-only root filesystem,
+  `no-new-privileges`, 파일 접근용 `DAC_OVERRIDE` 외 capability 제거를 적용한다.
+- 메모리 제한은 Alloy 256MiB, 프록시 64MiB이며 이미지 digest를 고정한다.
+  업그레이드할 때 태그와 digest를 함께 갱신하고 실제 수집을 재검증한다.
+
+자체 Loki로 전환할 때는 Alloy 수집 구조를 유지하고 목적지·인증을 조정한다.
+Cloud의 과거 로그는 자동 이전되지 않는다.
+
+검증: 격리된 Docker fixture와 실제 Loki로 API·Voice-agent 수집, 다른 프로젝트·Web·
+일회성 컨테이너 제외, debug 제외, 중첩 payload의 level 보존, 일반 문자열 오류 수집을 확인했다.
+Alloy 재시작 후 새 로그 수집과 프록시의 POST·archive·export 차단도 확인했다.
+새 인프라 설정은 사전 단위 테스트 대신 실제 컨테이너 smoke로 검증했다.
+실제 Grafana Cloud 인증·전송은 사용자 스택의 연결 정보와 토큰 설정 후 확인해야 한다.
+
 ## 실행
 
 현재 Mac 기준 Docker 런타임은 Kubernetes 없는 Colima를 사용한다.
