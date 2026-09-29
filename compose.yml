@@ -1,4 +1,80 @@
 services:
+  ghost:
+    image: ghost:6-alpine
+    # Keep repository-mounted theme/routes read-only; skip root entrypoint chown.
+    user: node
+    profiles: ["blog"]
+    restart: unless-stopped
+    depends_on:
+      ghost-db:
+        condition: service_healthy
+      ghost-content-init:
+        condition: service_completed_successfully
+    ports:
+      - "${GHOST_BIND_HOST:-127.0.0.1}:${GHOST_PORT:-2368}:2368"
+    environment:
+      NODE_ENV: production
+      url: ${GHOST_URL:-http://localhost:2368}
+      database__client: mysql
+      database__connection__host: ghost-db
+      database__connection__user: ghost
+      database__connection__password: ${GHOST_DB_PASSWORD:-ghost_local_password}
+      database__connection__database: ghost
+    volumes:
+      - ghost_content:/var/lib/ghost/content
+      - type: bind
+        source: ./ghost/theme/tello
+        target: /var/lib/ghost/content/themes/tello
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./ghost/theme/routes.yaml
+        target: /var/lib/ghost/content/settings/routes.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - ghost_internal
+      - default
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:2368/ghost/api/admin/site/', {redirect: 'manual'}).then(r => process.exit(r.status === 200 || r.status === 301 ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+  ghost-content-init:
+    image: ghost:6-alpine
+    profiles: ["blog"]
+    restart: "no"
+    user: root
+    entrypoint: ["sh", "-c"]
+    # Precreate bind parents before Docker can create them as root at Ghost start.
+    command: ["mkdir -p /var/lib/ghost/content/themes /var/lib/ghost/content/settings && chown -R node:node /var/lib/ghost/content"]
+    volumes:
+      - ghost_content:/var/lib/ghost/content
+
+  ghost-db:
+    image: mysql:8.0
+    profiles: ["blog"]
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ghost
+      MYSQL_USER: ghost
+      MYSQL_PASSWORD: ${GHOST_DB_PASSWORD:-ghost_local_password}
+      MYSQL_ROOT_PASSWORD: ${GHOST_DB_ROOT_PASSWORD:-ghost_local_root_password}
+    volumes:
+      - ghost_db_data:/var/lib/mysql
+    networks:
+      - ghost_internal
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$${MYSQL_PASSWORD}\" mysql --protocol=TCP -h 127.0.0.1 -u \"$${MYSQL_USER}\" \"$${MYSQL_DATABASE}\" -e 'SELECT 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
   postgres:
     image: pgvector/pgvector:pg17
     restart: unless-stopped
@@ -457,6 +533,8 @@ services:
           memory: ${GRAFANA_MEMORY_LIMIT:-512M}
 
 volumes:
+  ghost_content:
+  ghost_db_data:
   postgres_data:
   pgadmin_data:
   redis_data:
@@ -469,6 +547,8 @@ volumes:
   adaptor_api_tls:
 
 networks:
+  ghost_internal:
+    internal: true
   secrets_internal:
     internal: true
   openbao_host:

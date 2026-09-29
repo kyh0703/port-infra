@@ -1,0 +1,45 @@
+{
+  "name": "tello",
+  "description": "overthinker — an editorial Ghost theme with a Three.js orbital sculpture",
+  "version": "0.1.0",
+  "keywords": [
+    "ghost-theme"
+  ],
+  "engines": {
+    "ghost": ">=5.0.0"
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "npm run build:css && npm run build:hero",
+    "build:css": "tailwindcss -i src/input.css -o assets/css/screen.css --minify",
+    "build:hero": "esbuild src/hero.js --bundle --minify --target=es2020 --outfile=assets/js/hero.js",
+    "dev": "tailwindcss -i src/input.css -o assets/css/screen.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "esbuild": "0.28.2",
+    "tailwindcss": "^4.3.3",
+    "three": "0.186.1"
+  },
+  "author": {
+    "name": "Tello",
+    "email": "iproncloud@bridgetec.co.kr"
+  },
+  "config": {
+    "posts_per_page": 12,
+    "image_sizes": {
+      "s": {
+        "width": 400
+      },
+      "m": {
+        "width": 800
+      },
+      "l": {
+        "width": 1200
+      },
+      "xl": {
+        "width": 2000
+      }
+    }
+  }
+}

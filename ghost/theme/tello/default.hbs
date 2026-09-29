@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="{{@site.locale}}" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{meta_title}}</title>
+
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+
+    <link rel="stylesheet" href="{{asset "css/screen.css"}}">
+
+    {{!-- 테마 플래시 방지 — CSS 적용 전에 저장된 선택을 반영한다.
+          포털 next-themes 와 같은 규칙: 다크가 기본, light 만 오버라이드. --}}
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('overthinker-theme');
+                if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+            } catch (e) {}
+        })();
+    </script>
+
+    {{ghost_head}}
+</head>
+<body class="{{body_class}}">
+
+    <header class="site-header">
+        <div class="wrap site-header__inner">
+            <a class="brand" href="{{@site.url}}" aria-label="overthinker 홈">
+                <svg class="brand__symbol" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+                    <ellipse cx="20" cy="20" rx="16" ry="8" stroke="currentColor" stroke-width="1.8" transform="rotate(-40 20 20)"/>
+                    <ellipse cx="20" cy="20" rx="16" ry="8" stroke="currentColor" stroke-width="1.8" transform="rotate(40 20 20)"/>
+                    <circle cx="20" cy="20" r="3" fill="currentColor"/>
+                </svg>
+                <span class="brand__wordmark">overthinker<span class="brand__period">.</span></span>
+            </a>
+            {{!-- {{navigation}} 은 쓰지 않는다. 기본 항목이 Home 하나뿐인데
+                  좌측 로고가 이미 홈으로 가므로 중복이다. --}}
+            <nav class="site-nav" aria-label="사이트 액션">
+                {{!-- 우측 액션은 유리판 하나로 묶는다. 헤더가 이미 blur 를 쓰고
+                      있어 그 위에 반투명 층을 하나 더 얹는 형태다. --}}
+                <div class="nav__actions">
+                    {{!-- 상단에서는 좌측 로고가 홈 링크라 숨겨 둔다. 스크롤해서
+                          로고가 사라지는 순간에만 나타난다(CSS .is-docked). --}}
+                    <a class="icon-btn icon-btn--home" href="{{@site.url}}/" aria-label="홈">
+                        <svg viewBox="0 0 20 20" width="15" height="15" fill="none"
+                             stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                            <path d="M3 8.5 10 3l7 5.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                            <path d="M4.8 9.8V16a1 1 0 0 0 1 1h8.4a1 1 0 0 0 1-1V9.8"
+                                  stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    </a>
+                    <button class="icon-btn" type="button" data-ghost-search aria-label="검색">
+                        <svg viewBox="0 0 20 20" width="15" height="15" fill="none"
+                             stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                            <circle cx="9" cy="9" r="6"></circle>
+                            <path d="M13.5 13.5 17.5 17.5" stroke-linecap="round"></path>
+                        </svg>
+                    </button>
+                    <button class="icon-btn" type="button" id="theme-toggle"
+                        aria-label="라이트/다크 전환">◐</button>
+                    <a class="btn-cta" href="{{@site.url}}/rss/">RSS</a>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        {{{body}}}
+    </main>
+
+    <footer class="site-footer">
+        <div class="wrap site-footer__inner">
+            <a href="{{@site.url}}">overthinker</a>
+            <a href="{{@site.url}}/rss/">RSS</a>
+            <span class="site-footer__legal">&copy; {{date format="YYYY"}} overthinker</span>
+        </div>
+    </footer>
+
+    <script>
+        {{!-- 활성 탭 표시 — 현재 경로로 판정한다.
+              태그 슬러그로 맞출 수 없다: /tutorial/ 같은 카테고리 주소는
+              routes.yaml 의 채널이고, 채널에는 Ghost 가 tag 컨텍스트를 주지
+              않는다(빈 태그에서 404 가 나지 않도록 data: 를 뺐기 때문).
+              그래서 {{tag.slug}} 는 항상 비어 '전체'만 활성으로 남았다. --}}
+        (function () {
+            var nav = document.querySelector('.tabs');
+            if (!nav) return;
+
+            function norm(p) {
+                return p.replace(/\/+$/, '') || '/';
+            }
+
+            var here = norm(window.location.pathname);
+            var tabs = nav.querySelectorAll('.tab');
+
+            for (var i = 0; i < tabs.length; i++) {
+                var href = tabs[i].getAttribute('href') || '';
+                var path;
+                try {
+                    path = norm(new URL(href, window.location.origin).pathname);
+                } catch (e) {
+                    continue;
+                }
+                if (path === here) {
+                    tabs[i].classList.add('tab--on');
+                    tabs[i].setAttribute('aria-current', 'page');
+                }
+            }
+        })();
+
+        document.getElementById('theme-toggle').addEventListener('click', function () {
+            var root = document.documentElement;
+            var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+            root.setAttribute('data-theme', next);
+            try { localStorage.setItem('overthinker-theme', next); } catch (e) {}
+        });
+    </script>
+
+    <script src="{{asset "js/dock.js"}}" defer></script>
+
+    {{ghost_foot}}
+</body>
+</html>

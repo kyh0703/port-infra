@@ -1,0 +1,41 @@
+<li class="card{{#unless feature_image}} card--noimg{{/unless}}">
+    <a class="card__link" href="{{url}}">
+        {{#if feature_image}}
+            <img class="card__img"
+                 src="{{img_url feature_image size="m"}}"
+                 alt="{{#if feature_image_alt}}{{feature_image_alt}}{{else}}{{title}}{{/if}}"
+                 loading="lazy">
+        {{/if}}
+
+        {{!-- 글자가 이미지 위에 올라가므로 아래쪽을 어둡게 깔아 대비를 확보한다.
+              이미지 밝기와 무관하게 흰 글씨가 읽혀야 한다. --}}
+        <span class="card__scrim" aria-hidden="true"></span>
+
+        <div class="card__body">
+            {{#if primary_tag}}
+                {{!-- 첫 글자만 뽑는 헬퍼는 Ghost 에 없다(truncate 없음).
+                      태그 글리프로 대신한다 — 카테고리마다 모양이 같아도
+                      옆의 이름이 구분을 맡는다. --}}
+                <div class="card__source">
+                    <span class="card__mark" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" width="11" height="11" fill="none"
+                             stroke="currentColor" stroke-width="1.6">
+                            <path d="M2 2h5.2l6.6 6.6-5.2 5.2L2 7.2V2Z"
+                                  stroke-linejoin="round"></path>
+                            <circle cx="5" cy="5" r="1.1" fill="currentColor" stroke="none"></circle>
+                        </svg>
+                    </span>
+                    <span class="card__source-name">{{primary_tag.name}}</span>
+                </div>
+            {{/if}}
+
+            <h2 class="card__title">{{title}}</h2>
+
+            <div class="card__meta">
+                <time datetime="{{date format="YYYY-MM-DD"}}">{{date format="YYYY. M. D."}}</time>
+                <span class="card__dot" aria-hidden="true">·</span>
+                <span>{{reading_time minute="1분" minutes="%분"}}</span>
+            </div>
+        </div>
+    </a>
+</li>

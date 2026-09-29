@@ -1,0 +1,99 @@
+{{!< default}}
+
+<section class="intro{{#unless tag}}{{#unless primary_author}} intro--hero{{/unless}}{{/unless}}">
+    {{!-- 장식은 글 목록과 분리하고 WebGL 없이도 헤드라인은 그대로 읽힌다. --}}
+    {{#unless tag}}{{#unless primary_author}}
+        <div class="thought-scene" aria-hidden="true">
+            <div class="thought-scene__fallback"></div>
+            <canvas id="thought-canvas"></canvas>
+        </div>
+    {{/unless}}{{/unless}}
+
+    <div class="wrap intro__inner">
+        {{#if tag}}
+            <div class="eyebrow">Category</div>
+            <h1>{{tag.name}}</h1>
+            {{#if tag.description}}<p>{{tag.description}}</p>{{/if}}
+        {{else if primary_author}}
+            {{#primary_author}}
+                <div class="eyebrow">Author</div>
+                <h1>{{name}}</h1>
+                {{#if bio}}<p>{{bio}}</p>{{/if}}
+            {{/primary_author}}
+        {{else}}
+            <div class="eyebrow">overthinker / field notes</div>
+            <h1>생각은 깊게.<br>기록은 선명하게.</h1>
+            <p>기술과 아이디어 사이, 한 번 더 생각한 것들을 기록합니다.</p>
+        {{/if}}
+    </div>
+</section>
+
+{{!-- 카테고리 탭. 칩과 같은 이유로 고정 목록이다.
+      검색은 헤더 우측 액션으로 옮겼다. --}}
+<nav class="tabs" aria-label="카테고리" data-current="{{#if tag}}{{tag.slug}}{{/if}}">
+    <div class="wrap tabs__inner">
+        <div class="tabs__list">
+            <a class="tab" data-slug="" href="{{@site.url}}/">전체</a>
+            <a class="tab" data-slug="insight" href="{{@site.url}}/insight/">인사이트</a>
+            <a class="tab" data-slug="tech" href="{{@site.url}}/tech/">테크</a>
+            <a class="tab" data-slug="release" href="{{@site.url}}/release/">릴리즈</a>
+        </div>
+    </div>
+</nav>
+
+<div class="wrap">
+    {{!-- 추천 글 — 홈에만, featured 로 지정된 글이 있을 때만 --}}
+    {{#unless tag}}{{#unless primary_author}}
+        {{#get "posts" filter="featured:true" limit="1" include="tags,authors" as |featured|}}
+            {{#if featured}}
+                {{#foreach featured}}
+                    <section class="feature">
+                        <div class="section-label">추천</div>
+                        <a class="feature__card" href="{{url}}">
+                            {{#if feature_image}}
+                                <div class="feature__media">
+                                    <img src="{{img_url feature_image size="l"}}"
+                                         alt="{{#if feature_image_alt}}{{feature_image_alt}}{{else}}{{title}}{{/if}}">
+                                </div>
+                            {{/if}}
+                            <div class="feature__body">
+                                <div class="card__meta">
+                                    {{#if primary_tag}}<span class="tag">{{primary_tag.name}}</span>{{/if}}
+                                    <time datetime="{{date format="YYYY-MM-DD"}}">{{date format="YYYY.MM.DD"}}</time>
+                                </div>
+                                <h2 class="feature__title">{{title}}</h2>
+                                {{#if excerpt}}<p class="feature__excerpt">{{excerpt words="42"}}</p>{{/if}}
+                                <span class="feature__more">글 읽기 →</span>
+                            </div>
+                        </a>
+                    </section>
+                {{/foreach}}
+            {{/if}}
+        {{/get}}
+    {{/unless}}{{/unless}}
+
+    <div class="section-label">최신 글</div>
+
+    {{#if posts}}
+        <ul class="post-grid">
+            {{#foreach posts}}
+                {{> "post-card"}}
+            {{/foreach}}
+        </ul>
+    {{else}}
+        <div class="empty">
+            <svg viewBox="0 0 48 48" width="44" height="44" fill="none" stroke="currentColor"
+                 stroke-width="2" aria-hidden="true">
+                <circle cx="22" cy="22" r="14"></circle>
+                <path d="M17 17 27 27M27 17 17 27" stroke-linecap="round"></path>
+                <path d="M32.5 32.5 41 41" stroke-linecap="round"></path>
+            </svg>
+            <p class="empty__text">글이 없습니다</p>
+            <a class="btn btn--ghost" href="{{@site.url}}/">전체 보기</a>
+        </div>
+    {{/if}}
+</div>
+
+{{pagination}}
+
+<script src="{{asset "js/hero.js"}}" defer></script>

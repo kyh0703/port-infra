@@ -48,6 +48,94 @@ Compose 기동 시에도 `rag-migrator`가 성공적으로 완료된 뒤 RAG가 
 자동화와 운영 명령에서는 `docker compose down -v`를 사용하지 않는다.
 Compose project name은 `infra`로 고정하므로 worktree가 달라도 같은 stack/volumes를 재사용한다.
 
+### Ghost 블로그 (선택)
+
+`blog` 프로필은 Ghost 6와 전용 MySQL 8.0을 실행한다. 포털 소스나 기존 PostgreSQL을
+사용하지 않으며, 기본 `make up`에는 포함되지 않는다. 기존 블로그 서버·DNS·콘텐츠는 변경하지 않는다.
+[Ghost 공식 Docker 안내](https://docs.ghost.org/install/docker)를 참고한다.
+
+기존 `.env` 초기화가 끝난 infra 루트에서:
+
+```bash
+docker compose -p infra --profile blog up -d --wait ghost
+docker compose -p infra --profile blog logs --tail=100 ghost ghost-db
+docker compose -p infra --profile blog stop ghost ghost-db
+```
+
+- 블로그: `http://localhost:2368`, 관리자 최초 설정: `http://localhost:2368/ghost/`.
+- `GHOST_PORT`와 `GHOST_URL`은 `.env.example` 참고. 포트를 바꾸면 URL의 포트도 함께 변경한다.
+- 기본 바인딩은 `127.0.0.1`이다. `GHOST_BIND_HOST=0.0.0.0`이면 MacBook의 LAN·Tailscale
+  인터페이스로 접근할 수 있다. MySQL은 전용 내부 네트워크에만 연결하며 포트를 공개하지 않는다.
+- 글·계정은 `ghost_db_data`, 업로드 이미지는 `ghost_content` named volume에 보존한다.
+  Tello 테마·카테고리 라우팅은 아래의 저장소 파일을 읽기 전용으로 연결한다.
+  중지·재생성 때 같은 project name을 유지하고 `down -v`는 사용하지 않는다.
+- DB 비밀번호는 최초 초기화 시 반영된다. 기존 볼륨이 있으면 환경변수만 바꿔도 DB 비밀번호가 바뀌지는 않는다.
+
+기존 플랫폼을 건드리지 않고 `http://macbookpro:2368`로 보는 별도 미리보기:
+
+```bash
+INTERNAL_SERVER_KEY=ghost-compose-validation-only \
+GHOST_BIND_HOST=0.0.0.0 GHOST_URL=http://macbookpro:2368 \
+  docker compose --env-file .env.example -p infra-ghost-preview \
+  --profile blog up -d --wait ghost
+```
+
+이 명령의 키는 전체 Compose 파싱에만 필요하며 Ghost로 전달되지 않는다.
+미리보기 종료 시 같은 명령의 `up -d --wait ghost`를 `stop ghost ghost-db`로 바꾼다.
+`infra`와 `infra-ghost-preview`는 별도 볼륨을 사용하며 동일한 호스트 포트로 동시에 실행할 수 없다.
+
+`macbookpro`는 이 Mac의 Tailscale 이름이다. 접속 기기는 같은 Tailnet에 연결되어 있어야 한다.
+이 바인딩은 Tailnet 전용 제한이 아니라 LAN에서도 접근 가능한 설정이다.
+관리자 최초 설정 전에는 접속 가능한 다른 사용자가 소유자 계정을 만들 수 있으므로
+신뢰하는 네트워크에서 `/ghost/`의 최초 설정을 완료한다. 공용 인터넷에는 이 HTTP 포트를 노출하지 않는다.
+재기동 시 위 두 `GHOST_*` 값을 유지하거나 로컬 `.env`에 설정해야 URL·바인딩이 되돌아가지 않는다.
+
+이 구성은 로컬 블로그 확인용이다. 공개 운영 전에는 DB 비밀번호 교체(최초 기동 전),
+HTTPS 리버스 프록시, 실제 도메인에 맞는 `GHOST_URL`, SMTP 설정과 DB·content 백업이 필요하다.
+프록시는 원래 HTTPS 요청임을 `X-Forwarded-Proto`로 전달해야 한다.
+기존 `blog.telloai.io` 데이터 이전, 뉴스레터 발송 설정, 별도 Analytics·ActivityPub 서비스는 포함하지 않는다.
+이미지는 `ghost:6-alpine`과 `mysql:8.0` 계열 태그를 사용하므로 업데이트 전 백업 후 검증한다.
+
+#### overthinker 테마 소스 관리
+
+`tello-ai/infra`의 `ghost/theme`을 커밋
+`edd03ccea24fd2d06239f2cc3789c4e4672f4e82` 기준으로 이관했다.
+이제 이 저장소의 `ghost/theme/tello/`와 `ghost/theme/routes.yaml`이 원본이다.
+office 저장소와 자동 동기화하지 않으며 Git push만으로 운영 서버에 배포되지는 않는다.
+공개 브랜드는 `overthinker`로 변경했다. 기존 활성화 설정과 볼륨 경로를 유지하기 위해
+내부 테마 ID·디렉터리 이름만 `tello`로 유지한다. 헤더는 SVG 궤도 심볼·텍스트 워드마크를 쓴다.
+UI 글꼴은 Pretendard Variable v1.3.9를 jsDelivr에서 동적 서브셋으로 로드한다.
+로고·제목·본문·메타데이터에 적용하며 코드 블록만 시스템 고정폭 글꼴을 사용한다.
+히어로 조형물 아래의 장식용 FIG. 캡션은 표시하지 않는다.
+
+처음 설치하면 `/ghost/`에서 관리자 계정을 만들고 Settings → Design & branding의
+테마 선택 화면에서 `tello`를 활성화한다. 테마 파일 마운트와 활성화는 별개이며,
+활성화 선택은 MySQL에 저장된다. 기존 설정을 자동으로 덮어쓰지 않는다.
+현재 `infra-ghost-preview`에는 미리보기용으로 `tello`를 활성화했다.
+
+- `ghost/theme/tello/`: Handlebars 템플릿·로고·JS·컴파일된 CSS와 Tailwind 원본.
+- `ghost/theme/routes.yaml`: `/insight/`, `/tech/`, `/release/` 채널.
+  글에 `insight`, `tech`, `release` 태그를 붙이면 해당 목록에 노출된다.
+- 템플릿·라우팅 변경 후 `docker compose -p infra --profile blog restart ghost`.
+  미리보기에서는 앞서 설명한 env 옵션과 project name을 사용한다.
+- CSS·히어로 원본 수정 시 테마 디렉터리에서 `npm ci`와 `npm run build`를 실행하고
+  `assets/css/screen.css`와 `assets/js/hero.js`를 함께 반영한다. 초기 실행에는 빌드가 필요 없다.
+  Three.js는 고정 버전으로 로컬 번들에 포함하므로 실행 중 CDN에서 가져오지 않는다.
+- `src/hero.js`는 Three.js 매듭·궤도 조형물이다. 다크/라이트 팔레트, 포인터 반응,
+  최대 30fps·DPR 1.5 제한을 적용한다. 화면 밖·비활성 탭에서는 중지하고,
+  모션 줄이기에서는 정지 화면을 표시한다. WebGL 미지원 시 CSS 궤도 윤곽을 유지한다.
+- 읽기 전용 마운트이므로 관리자에서 테마·라우팅을 덮어쓰지 말고 저장소에서 수정한다.
+  `ghost-content-init`은 content 볼륨 소유권만 초기화하고, Ghost는 `node` 사용자로 실행한다.
+  테마 원본에는 소유권 변경을 하지 않는다.
+
+Tello 외부 서비스 링크는 제거하고 블로그 홈·RSS 링크로 교체했다.
+미리보기의 사이트 제목도 `overthinker`로 변경했다. 새 설치에서는 관리자 General에서
+사이트 제목을 설정한다. 운영 글·계정·언어·코드 삽입 설정·업로드 이미지는 가져오지 않았다.
+운영 HTML의 Ghost 버전은 6.55, 로컬 검증 버전은 6.65이며 운영 DB는 변경하지 않았다.
+
+검증: `macbookpro:2368`에서 실제 WebGL 렌더·다크/라이트·320/390/1440px 화면 확인.
+모션 줄이기·화면 밖 상태에서는 WebGL draw 호출이 0이고 다시 노출하면 재개됨을 확인했다.
+
 ### RAG 관리자 임베딩 키
 
 - RAG는 관리자 `/admin/keys`에 등록한 OpenAI 키를 항상 사용한다. 임베더 선택 환경변수는 없다.

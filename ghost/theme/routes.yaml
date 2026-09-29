@@ -1,0 +1,39 @@
+# Ghost 라우팅 — blog.telloai.io
+#
+# 적용: content/settings/routes.yaml 에 넣고 Ghost 재시작.
+#       (관리자 Settings > Labs > Routes 에서 업로드해도 된다)
+#
+# 컬렉션(collections)이 아니라 채널(channel)을 쓴다. 컬렉션은 글 하나가
+# 컬렉션 하나에만 속할 수 있어, 태그를 두 개 단 글이 한쪽 목록에서 사라진다.
+# 채널은 그 제약이 없고 글 주소(/{slug}/)도 바뀌지 않는다.
+#
+# `data: tag.xxx` 는 넣지 않는다. Ghost 는 글이 하나도 없는 태그를 공개
+# 리소스로 취급하지 않아, data 로 지정하면 그 태그에 글이 생기기 전까지
+# 해당 주소가 404 가 된다. filter 만 두면 빈 목록(200)으로 정상 렌더된다.
+#
+# slug 는 Ghost 태그 slug 및 테마의 탭·칩 링크와 반드시 일치해야 한다.
+
+routes:
+  /insight/:
+    controller: channel
+    filter: tag:insight
+    template: index
+
+  /tech/:
+    controller: channel
+    filter: tag:tech
+    template: index
+
+  /release/:
+    controller: channel
+    filter: tag:release
+    template: index
+
+collections:
+  /:
+    permalink: /{slug}/
+    template: index
+
+taxonomies:
+  tag: /tag/{slug}/
+  author: /author/{slug}/
