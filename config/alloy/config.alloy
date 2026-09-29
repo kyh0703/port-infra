@@ -35,7 +35,9 @@ discovery.relabel "apps" {
 }
 
 loki.source.docker "apps" {
-  host             = "http://docker-log-proxy:2375"
+  // Docker's TCP transport keeps the log stream open. HTTP mode applies
+  // refresh_interval as a whole-request timeout, reconnecting every 10 seconds.
+  host             = "tcp://docker-log-proxy:2375"
   targets          = discovery.relabel.apps.output
   refresh_interval = "10s"
   labels           = { environment = sys.env("ALLOY_ENVIRONMENT") }
