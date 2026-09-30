@@ -151,6 +151,69 @@ Compose 기동 시에도 `rag-migrator`가 성공적으로 완료된 뒤 RAG가 
 자동화와 운영 명령에서는 `docker compose down -v`를 사용하지 않는다.
 Compose project name은 `infra`로 고정하므로 worktree가 달라도 같은 stack/volumes를 재사용한다.
 
+### Jev 음성사서함 감지 (선택)
+
+OpenRouter 키를 등록하는 것만으로 감지가 활성화되지는 않는다. API와 worker 양쪽의
+`JEV_VOICEMAIL_ENABLED=true`, 동일한 `JEV_ALLOWED_PUBLISHED_IDS`, 기존 내부 인증 키가 필요하다.
+키는 API의 기존 암호화된 provider credential 저장소에서 읽으며 Compose에 새로 넣지 않는다.
+
+`config/jev-voicemail.local.example.yaml`은 이미지·볼륨을 바꾸지 않는 환경변수 전용 overlay다.
+API 제한 시간은 400ms, worker 제한 시간은 600ms이며 `JEV_ENDPOINTING_ENABLED=false`를 유지한다.
+예제는 `JEV_ALLOWED_PUBLISHED_IDS` 환경변수를 필수로 받는다. 배포용
+`config/jev-voicemail.local.yaml`에 실제 ID 목록을 문자열로 고정하면 재기동 시에도 범위가 유지된다.
+이 로컬 파일은 Git에서 제외한다. 허용 목록은 실제 활성 publishedId를 쉼표로 구분하며
+전체 허용 wildcard를 사용하지 않는다.
+
+기존 `.env`가 준비된 infra 루트에서 로컬 overlay를 준비한 뒤 실행한다.
+현재 서비스별 Compose 파일 체인을 유지하고 이 overlay를 마지막에 적용한다.
+API와 worker의 기존 릴리스 체인이 다를 수 있으므로 한 서비스의 체인을 다른 서비스에 재사용하지 않는다.
+기존 통화가 없는 시점에 API, worker 순서로 갱신한다.
+
+```bash
+JEV_OVERLAY="${PWD}/config/jev-voicemail.local.yaml"
+for service in api voice-agent; do
+  files="$(docker inspect "infra-${service}-1" \
+    --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }}')"
+  case "$files" in
+    "$JEV_OVERLAY"|*,"$JEV_OVERLAY") ;;
+    *) files="${files},${JEV_OVERLAY}" ;;
+  esac
+  COMPOSE_PATH_SEPARATOR=, COMPOSE_FILE="$files" \
+    docker compose --project-directory "$PWD" --env-file .env -p infra \
+    up -d --no-deps --pull never --wait --wait-timeout 90 "$service" || break
+done
+```
+
+다음 배포에도 이 overlay를 마지막에 유지한다. 새 publication을 발행하면 ID가 바뀌므로
+허용 목록을 갱신하고 양쪽 서비스를 다시 적용한다. 종료된 통화·텍스트 통화·비-SIP 세션은
+음성사서함 판단 대상이 아니다. 판단 실패·시간 초과 시 통화는 유지하며,
+유효한 `voicemail` 분류가 반환되면 추가 점수 문턱 없이 종료를 요청한다.
+종료 API 승인과 제어권 재확인 후 LiveKit room을 삭제한다.
+
+2026-09-30 로컬 검증:
+
+- 활성 publication 12개를 양쪽 허용 목록에 적용하고 기존 API·worker 이미지를 유지했다.
+  API·worker·Redis·PostgreSQL health와 worker의 LiveKit 등록을 확인했다.
+- 실제 worker → API 요청에서 없는 세션은 404, 비활성 EOT는 403으로 거절됐다.
+- 기존 암호화된 OpenRouter 키로 `typesafe/jev-1.13-20260917`의 실제 HTTP 200 응답을 받았다.
+  400ms 요청 제한 안에서 영어 사서함 안내는 214ms, 확률·신뢰도 0.98로 판정됐다.
+  한국어 인사말은 286ms에 `human`으로 판정됐다.
+- 최초 한국어 사서함 샘플은 확률·신뢰도 0.95로 분류됐지만 당시 이중 0.98 정책에 막혔다.
+  이후 아래 수정에서 이 점수 문턱을 제거했다.
+  첫 공급자 요청은 약 479ms였으므로 400ms 제한을 넘길 수 있다.
+  이 수치는 지연 보장이나 한국어 사서함 감지율 검증이 아니다. 실제 SIP 통화 종료는 검증하지 않았다.
+- 활성화 전 Redis AOF 손상으로 API가 재시작 중이었다. 원본 전체를
+  `data/backups/redis-before-jev-20260930T023142Z/redis-data.tar`에 백업한 뒤,
+  승인된 `redis-check-aof --fix`로 손상된 incremental AOF 꼬리 3,789,800바이트를 제거했다.
+  원본 백업은 보관하며 PostgreSQL 데이터와 기존 키는 변경하지 않았다.
+- 사서함 자동 종료 수정은 worker 이미지
+  `port-voice-agent:jev-voicemail-termination-20260930`으로 배포했다.
+  `config/jev-voicemail-termination.local.yaml`은 기존 worker 체인 마지막에 붙이는 이미지 전용 override다.
+  API 이미지·기존 환경변수·허용 publication 12개·EOT OFF는 변경하지 않았다.
+  실제 Jev 응답을 HTTP 경계에서 재생한 배포 worker smoke에서 한국어·영어 사서함의
+  종료 콜백, 실제 LiveKit room 삭제와 RTC 연결 해제를 확인했다. 사람 응답은 연결을 유지했다.
+  외부 SIP 전화 전체 경로는 검증하지 않았으며 검증용 room과 임시 컨테이너는 제거했다.
+
 ### Ghost 블로그 (선택)
 
 `blog` 프로필은 Ghost 6와 전용 MySQL 8.0을 실행한다. 포털 소스나 기존 PostgreSQL을
