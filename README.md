@@ -214,6 +214,28 @@ done
   종료 콜백, 실제 LiveKit room 삭제와 RTC 연결 해제를 확인했다. 사람 응답은 연결을 유지했다.
   외부 SIP 전화 전체 경로는 검증하지 않았으며 검증용 room과 임시 컨테이너는 제거했다.
 
+2026-09-30 main 병합 후 최종 로컬 배포:
+
+- worker main 병합 커밋은 `be4e7db3ab0cb960c69d6003d300eac723449ba7`,
+  infra 활성 설정 커밋은 `f9def8581dc2d026289ab2f86da91e8f3ff9adff`다. 두 저장소 모두 main에 push했다.
+- [main의 build-dev 실행](https://github.com/kyh0703/port-voice-agent/actions/runs/36671724193)은
+  GitHub 계정 결제/지출 한도 문제로 runner가 시작되지 못했다. 빌드 단계가 실행되지 않았으며
+  이 workflow에서는 GHCR 이미지를 발행하지 못했다. 결제/한도 문제 해결 전 자동 발행은 차단 상태다.
+- 대신 위 worker 커밋의 `git archive`로 추적된 파일만 빌드했다. Node 20·linux/arm64 로컬 이미지
+  `port-voice-agent:main-be4e7db3ab0c`의 OCI revision은 병합 커밋 전체 SHA와 일치한다.
+  `config/jev-voicemail-termination.local.yaml`을 이 이미지로 갱신하고 worker만 재생성했다.
+  Compose의 다른 설정·볼륨·환경변수는 같으며 API 컨테이너는 재생성하지 않았다.
+- 병합된 main에서 테스트 888개, typecheck, build가 통과했다. 배포 후 API·worker·Redis·PostgreSQL은
+  healthy이고 worker는 LiveKit에 등록됐다. 양쪽 허용 목록은 DB의 활성 publication 12개와 정확히 같고,
+  음성사서함 ON·EOT OFF다. 실제 worker → API 요청의 없는 세션 404·비활성 EOT 403도 확인했다.
+- 기존 암호화된 키와 운영 분류 프롬프트로 얻은 새 Jev HTTP 200 응답을 배포 이미지의 HTTP 경계에서
+  재생했다. 한국어 사서함은 확률 0.77·신뢰도 0.71에서도 종료 콜백 1회, 실제 LiveKit room 삭제,
+  RTC 연결 해제를 확인했다. 영어 사람 응답은 확률 0.97·신뢰도 0.96의 `human`으로 연결을 유지했다.
+  검증용 room은 모두 제거했다. 외부 SIP 전화와 실제 STT를 포함한 전체 경로 검증은 아니다.
+- 이번 모델 warm-up은 693ms였고 이후 일부 요청도 기존 400ms 제한을 초과했다.
+  제한 시간은 늘리지 않았다. 시간 초과·판정 실패 시 통화를 유지하는 기존 fail-open 정책이 남는다.
+  모델 응답 시간이나 한국어·영어 감지 정확도를 보장하는 검증은 아니다.
+
 ### Ghost 블로그 (선택)
 
 `blog` 프로필은 Ghost 6와 전용 MySQL 8.0을 실행한다. 포털 소스나 기존 PostgreSQL을
