@@ -503,6 +503,8 @@ html[data-theme='light'] .eyebrow {
   .site-header__inner { gap: 0.7rem; }
   .brand { gap: 0.25rem; }
   .brand__symbol { width: 26px; height: 26px; }
+  .nav__rss { display: none; }
+  .btn-cta { padding-inline: 0.75rem; }
   .intro.intro--hero {
     display: block;
     padding: 2.75rem 0 260px;
