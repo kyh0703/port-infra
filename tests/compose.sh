@@ -15,12 +15,11 @@ fi
 config="$(${compose_command[@]} --env-file .env.example -f compose.yml --profile observability --profile tools config --format json)"
 test ! -e compose.local.yml
 dev_config="$(${compose_command[@]} --env-file .env.example -f compose.yml -f compose.dev.yml config --format json)"
-telephony_config="$(${compose_command[@]} --env-file .env.example -f compose.yml --profile telephony config --format json)"
 
 jq -e '
   . as $root |
   (.services.keycloak == null and .services."keycloak-db-init" == null)
-  and (["postgres", "redis", "api", "web", "rag", "voice-agent", "aggregator", "adaptor", "livekit"] | all(.[]; $root.services[.] != null))
+  and (["postgres", "redis", "api", "web", "rag", "voice-agent", "aggregator", "adaptor"] | all(.[]; $root.services[.] != null))
   and ([.services[] | has("build")] | any | not)
   and ([.services[]?.ports[]?.published] | any(. == "18080") | not)
 ' >/dev/null <<<"${config}"
@@ -99,9 +98,6 @@ jq -e '
   and .services."voice-agent".image == "ghcr.io/kyh0703/port-voice-agent:dev"
   and .services.aggregator.image == "ghcr.io/kyh0703/port-aggregator:dev"
   and .services.adaptor.image == "ghcr.io/kyh0703/port-adaptor:dev"
-  and .services.livekit.image == "livekit/livekit-server:v1.13.6"
-  and .services.livekit.command == ["--dev", "--bind", "0.0.0.0", "--redis-host", "redis:6379"]
-  and ((.services.livekit.environment.LIVEKIT_CONFIG // "") | contains("enable_remote_unmute: true"))
 ' >/dev/null <<<"${config}"
 
 jq -e '
@@ -132,39 +128,19 @@ jq -e '
   and .services.aggregator.depends_on.redis.condition == "service_healthy"
   and .services."voice-agent".depends_on.api.condition == "service_started"
   and .services."voice-agent".depends_on.rag.condition == "service_healthy"
-  and .services."voice-agent".depends_on.livekit.condition == "service_started"
-  and .services.adaptor.depends_on.api.condition == "service_started"
-  and .services.api.depends_on.livekit.condition == "service_started"
   and .services.adaptor.environment.PUBLIC_BASE_URL == "http://macbookpro:3002"
-  and (.services.adaptor.environment.ACCESS_TOKEN_IDENTITY_URL == null)
 ' >/dev/null <<<"${config}"
 
 jq -e '
   . as $root |
-  (["DATABASE_URL", "REDIS_URL", "RAG_URL", "RAG_RETRIEVAL_CAPABILITY_SECRET", "WEB_ORIGIN", "AUTH_PASSWORD_RESET_SECRET", "AUTH_EMAIL_VERIFICATION_SECRET", "AUTH_RATE_LIMIT_SECRET", "WEB_CHAT_RESUME_TOKEN_SECRET", "AUTH_SESSION_COOKIE_SECURE", "AUTH_SESSION_TTL_SECONDS", "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY"] | all(.[]; $root.services.api.environment[.] != null))
+  (["DATABASE_URL", "REDIS_URL", "RAG_URL", "RAG_RETRIEVAL_CAPABILITY_SECRET", "WEB_ORIGIN", "AUTH_PASSWORD_RESET_SECRET", "AUTH_EMAIL_VERIFICATION_SECRET", "AUTH_RATE_LIMIT_SECRET", "WEB_CHAT_RESUME_TOKEN_SECRET", "AUTH_SESSION_COOKIE_SECURE", "AUTH_SESSION_TTL_SECONDS", "VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY"] | all(.[]; $root.services.api.environment[.] != null))
   and ([.services.api.environment | keys[] | select(test("KEYCLOAK|KC_"))] | length == 0)
   and .services.api.environment.WEB_ORIGIN == "http://macbookpro:3000"
-  and .services.api.environment.LIVEKIT_URL == "ws://macbookpro:7880"
-  and .services.api.environment.LIVEKIT_API_SECRET == "secret"
   and .services.api.environment.NODE_ENV == "local"
   and (.services.api.environment | has("AUTH_EMAIL_VERIFICATION_EXPOSE_DEBUG_CODE") | not)
   and (["MAIL_HOST", "MAIL_USER", "MAIL_PASS"] | all(.[]; ($root.services.api.environment[.] // "") == ""))
-  and .services."voice-agent".environment.LIVEKIT_URL == "ws://macbookpro:7880"
-  and .services."voice-agent".environment.LIVEKIT_API_SECRET == "secret"
-  and .services."voice-agent".environment.LIVEKIT_URL != null
-  and .services."voice-agent".environment.LIVEKIT_API_KEY != null
-  and .services."voice-agent".environment.LIVEKIT_API_SECRET != null
   and (.services.api.environment | has("USER_EMAIL_LOOKUP_KEY") | not)
   and (.services.api.environment | has("USER_PII_ENCRYPTION_KEY") | not)
-' >/dev/null <<<"${config}"
-
-jq -e '
-  .services.livekit.restart == "unless-stopped"
-  and (.services.livekit.ports | any(.published == "7880" and .target == 7880 and .protocol == "tcp"))
-  and (.services.livekit.ports | any(.published == "7881" and .target == 7881 and .protocol == "tcp"))
-  and (.services.livekit.ports | any(.published == "7882" and .target == 7882 and .protocol == "udp"))
-  and .services.api.environment.LIVEKIT_URL == "ws://macbookpro:7880"
-  and .services."voice-agent".environment.LIVEKIT_URL == "ws://macbookpro:7880"
 ' >/dev/null <<<"${config}"
 
 jq -e '
@@ -272,50 +248,6 @@ jq -e '
 ' >/dev/null <<<"${dev_config}"
 
 printf 'compose dev contract: ok\n'
-
-jq -e '
-  .services.livekit.profiles == null
-  and (.services.livekit.command | index("--redis-host") != null)
-  and .services.livekit.depends_on.redis.condition == "service_healthy"
-  and .services."livekit-sip".profiles == ["telephony"]
-  and .services."livekit-sip".image == "livekit/sip:v1.7.0"
-  and .services."livekit-sip".environment.LIVEKIT_API_KEY == "devkey"
-  and .services."livekit-sip".environment.LIVEKIT_API_SECRET == "secret"
-  and .services."livekit-sip".environment.LIVEKIT_URL == "ws://livekit:7880"
-  and .services."livekit-sip".environment.REDIS_ADDRESS == "redis:6379"
-  and (.services."livekit-sip".ports | any(.published == "18090" and .target == 8080))
-  and (.services."livekit-sip".ports | any(.published == "15090" and .target == 5060))
-  and (.services."livekit-sip".ports | any(.published == "15000" and .target == 10000))
-  and .services.asterisk.profiles == ["telephony"]
-  and .services.asterisk.image == "andrius/asterisk:22-alpine"
-  and (.services.asterisk.volumes | any(.target == "/etc/asterisk/modules.conf" and .read_only == true))
-  and (.services.asterisk.ports | any(.published == "15060" and .target == 5060))
-  and (.services.asterisk.ports | any(.published == "15100" and .target == 10000))
-  and .services."livekit-cli".profiles == ["telephony"]
-  and .services."livekit-cli".image == "livekit/livekit-cli:v2.16.3"
-  and (.services."livekit-cli".volumes | any(.target == "/sip" and .read_only == true))
-  and (.services."livekit-sip".ports | all(.host_ip == "127.0.0.1"))
-  and (.services.asterisk.ports | all(.host_ip == "127.0.0.1"))
-  and .services."livekit-sip".healthcheck.test[0] == "CMD"
-  and .services."livekit-sip".healthcheck.test[1] == "bash"
-  and (.services."livekit-sip".healthcheck.test[3] | contains("GET / HTTP/1.0"))
-  and (.services."livekit-sip".healthcheck.test[3] | contains("status") and contains("200"))
-  and (.services."livekit-sip" | has("network_mode") | not)
-  and (.services.asterisk | has("network_mode") | not)
-' >/dev/null <<<"${telephony_config}"
-
-jq -e '(.services."livekit-sip" == null and .services.asterisk == null and .services."livekit-cli" == null)' >/dev/null <<<"${config}"
-test -f sip/inbound-trunk.json
-test -f sip/outbound-trunk.json
-test -f sip/dispatch-rule.json
-test -x scripts/sip-provision.sh
-jq -e '.dispatch_rule.roomConfig.agents[0].agentName == "voice-agent"' sip/dispatch-rule.json >/dev/null
-jq -e '.trunk.numbers == ["2000"]' sip/inbound-trunk.json >/dev/null
-jq -e '.trunk.numbers == ["600"]' sip/outbound-trunk.json >/dev/null
-grep -Fq 'same => n,Echo()' asterisk/extensions.conf
-grep -Fq 'PJSIP/${EXTEN:1}@livekit' asterisk/extensions.conf
-grep -Fq 'noload => chan_alsa.so' asterisk/modules.conf
-printf 'telephony compose contract: ok\n'
 
 # The key belongs to server callers only, including migration settings validation.
 jq -e '

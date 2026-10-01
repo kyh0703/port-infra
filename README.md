@@ -69,7 +69,7 @@ Alloy 로그의 전송 실패와 Cloud 사용량을 함께 확인한다.
 ### 수집 범위와 보안
 
 - 지정 프로젝트의 `api`·`voice-agent`만 수집한다. 일회성 `compose run` 컨테이너,
-  Web·DB·LiveKit·Alloy 로그는 제외한다. 호스트가 여러 대면 호스트별 수집기가 필요하다.
+  Web·DB·Alloy 로그는 제외한다. 호스트가 여러 대면 호스트별 수집기가 필요하다.
 - 최상위 Pino `level`이 `10`·`20` 또는 문자열 `trace`·`debug`인 로그는 버린다.
   info 이상과 JSON이 아닌 시작 오류는 보존한다. 기존 Docker 로그 이력도 최초 실행 때
   읽힐 수 있으므로 활성화 전에 과거 로그의 민감정보도 확인한다.
@@ -131,6 +131,23 @@ make infra-up
 공개 Web 프록시나 외부 도구 헤더에 넣지 않는다. 기존 환경에 적용할 때도 초기화 후
 Worker → API → RAG 순서로 갱신하고 각 서비스의 health를 확인한다.
 
+전체 플랫폼을 시작하기 전 API와 Worker의 비공개 환경파일을 준비한다. 기존 파일은 덮어쓰지 않는다.
+
+```bash
+cp -n config/api.env.example config/api.local.env
+cp -n config/voice-agent.env.example config/voice-agent.local.env
+chmod 600 config/api.local.env config/voice-agent.local.env
+```
+
+두 파일의 `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`에 동일한 LiveKit Cloud 프로젝트의
+접속 주소와 자격증명을 설정한다. 키와 secret은 서버 전용이며 example 파일이나 Git에 넣지 않는다.
+복사한 root `.env`의 example 선택값도 다음 비공개 경로로 바꾼다.
+
+```dotenv
+API_ENV_FILE=./config/api.local.env
+VOICE_AGENT_ENV_FILE=./config/voice-agent.local.env
+```
+
 전체 플랫폼 이미지 운영
 
 여섯 애플리케이션은 sibling 저장소가 GHCR에 발행한 `:dev` 이미지를 사용한다.
@@ -150,6 +167,10 @@ Compose 기동 시에도 `rag-migrator`가 성공적으로 완료된 뒤 RAG가 
 운영 중인 서비스 상태는 `make health`, 최근 로그는 `make logs`로 확인한다.
 자동화와 운영 명령에서는 `docker compose down -v`를 사용하지 않는다.
 Compose project name은 `infra`로 고정하므로 worktree가 달라도 같은 stack/volumes를 재사용한다.
+
+현재 로컬 Cloud 전환 릴리스는 비공개 `config/livekit-cloud.local.yaml` 이미지 overlay를 사용한다.
+실행 중인 stack을 변경할 때는 기존 Compose `-f` 목록을 유지하고 이 파일을 마지막에 적용한다.
+기본 이미지 운영용인 위 `make deploy`·`make recreate`를 그대로 실행해 현재 릴리스를 교체하지 않는다.
 
 ### Jev 음성사서함 감지 (선택)
 
@@ -511,13 +532,24 @@ make openbao-down
 | Aggregator | `3001` | `3000` |
 | OpenBao HTTPS | `127.0.0.1:18200` | `8200` |
 
-Compose의 `livekit` 서비스(`livekit/livekit-server:latest`)가 LiveKit dev server를 실행한다.
-API와 Voice Agent는
-`config/api.env`와 `config/voice-agent.env`의 `LIVEKIT_URL`인 `ws://macbookpro:7880`을
-사용한다. Compose에서는 각각 `API_ENV_FILE`과 `VOICE_AGENT_ENV_FILE`로 이 파일을 지정한다.
+미디어 전송은 LiveKit Cloud를 사용하며 로컬 LiveKit 서버는 실행하지 않는다.
+API는 `LIVEKIT_URL`을 브라우저에 반환하고, Worker는 자신의 환경파일에서 같은 Cloud URL을 읽는다.
+접속 주소 형식은 `wss://YOUR_PROJECT.livekit.cloud`다. 로컬 미디어 포트나 Docker 호스트의
+ICE 주소를 광고하는 설정은 필요하지 않다.
 
-커스텀 설정은 example 파일을 local 파일로 복사한 뒤 root `.env`의
-`API_ENV_FILE`과 `VOICE_AGENT_ENV_FILE`을 복사한 경로로 지정한다.
+Compose는 기본적으로 `config/api.local.env`와 `config/voice-agent.local.env`를 읽는다.
+API와 api-migrator는 같은 `API_ENV_FILE` 선택값을 사용한다. `.env.example`은 config 검증용으로
+example 파일을 명시하므로, 실제 실행에서는 위 비공개 경로를 선택해야 한다.
+API와 Worker의 Cloud URL·API key·secret은 같은 프로젝트의 값이어야 하며 개발용 fallback은 없다.
+
+Worker 세션은 `record:false`로 시작하고 LiveKit Cloud의 추가 녹음·transcript 저장을 활성화하지 않는다.
+Port의 기존 STT와 대화 기록은 유지한다. 로컬 전화/SIP 스택은 제공하지 않으며 외부 전화 연결은 현재 범위에 없다.
+Worker 이미지에는 native RTC의 Cloud TLS 인증서 검증에 필요한 시스템 CA 인증서가 있어야 한다.
+
+Cloud webhook 설정의 endpoint는 `https://<PUBLIC_API_DOMAIN>/api/v1/livekit/webhooks`이며,
+서명용 API key는 API에 설정한 것과 같은 LiveKit Cloud 프로젝트의 key를 선택한다.
+현재는 공개 HTTPS API 주소가 없어 Cloud의 자동 webhook 전송을 설정하거나 검증하지 않았다.
+Railway와 공개 호스팅은 별도 배포 범위이며, 로컬 수신 검증만으로 외부 전송이 준비됐다고 보지 않는다.
 
 API의 `WEB_ORIGIN`은 인증 리다이렉트에 사용하는 canonical 웹 주소이며, 로컬 Compose에서는
 `http://macbookpro:3000`을 유지한다. `WEB_ALLOWED_ORIGINS`는 canonical origin 외에 CORS와
@@ -525,9 +557,6 @@ CSRF 검사에서 허용할 정확한 origin을 쉼표로 구분한 목록이다
 `http://localhost:3000,http://localhost:3010`을 명시하며, 다른 localhost 포트나 wildcard를
 자동 허용하지 않는다. 추가 origin이 필요 없는 환경에서는 이 값을 비워 두거나 생략한다.
 허용 목록은 Origin 검사를 비활성화하지 않으며, CSRF 보호 요청에 Origin이 없으면 거부한다.
-
-LiveKit dev server의 기본 개발 credential은 `devkey`/`secret`이며 운영 credential로
-사용하지 않는다.
 
 ## 음성 미리듣기 저장과 생성 제한
 
@@ -556,92 +585,17 @@ API는 생성된 샘플을 `voice_preview_cache` named volume의 `/app/data/voic
   Redis를 사용하므로 API replica들은 같은 Redis와 **같은 캐시 파일시스템**을 공유해야 한다.
   다른 호스트의 독립 local volume을 같은 공유 저장소로 간주하면 안 된다.
 
-## 로컬 SIP/전화 테스트 스택
-
-Asterisk와 LiveKit SIP는 기본 실행에서 제외된 `telephony` profile로 제공한다.
-기존 `livekit`과 `redis`를 재사용하고 Compose 내부 DNS로만 통신하므로, 기본 `make deploy`의
-리소스 부담과 기존 named volume에는 영향이 없다.
-
-```bash
-make telephony-up
-make telephony-provision
-make telephony-health
-make telephony-logs
-```
-
-`make telephony-provision`은 `scripts/sip-provision.sh`를 통해 `sip/`의 로컬 inbound trunk, outbound trunk, dispatch rule을
-이름으로 조회한 뒤 없는 리소스만 생성한다. 따라서 두 번 실행해도 중복되지 않으며, 생성 결과에
-반환되는 inbound/outbound trunk ID를 기록해 둔다. 실제 전화번호를 연결할 때는 Port Admin/API에서
-inbound trunk에 번호와 Asterisk 경로를 바인딩하고, outbound transfer가 필요하면 local voice-agent
-환경의 outbound trunk ID를 설정한다. 외부 통신사 trunk, 공인 IP, TLS, 녹음/Egress는 포함하지 않는다.
-
-Echo 테스트 목적의 Asterisk 내선 `600`은 로컬 RTP 범위에서 동작한다. SIP 포트는 loopback에만
-바인딩된 `15090`(LiveKit SIP), `15060`(Asterisk), LiveKit SIP health는 `18090`이며 필요하면 `.env`에서
-변경할 수 있다. 로컬 inbound 테스트 번호는 `2000`이다. 종료할 때는 `make telephony-down`을 사용한다.
-
-### PJSUA CLI 테스트 단말
-
-Mac용 CLI는 `brew install pjproject`로 설치한다. 현재 Colima의 loopback UDP 전달 경로에
-의존하지 않도록 반복 통화 테스트는 Asterisk와 같은 `infra_default` Docker 네트워크에서 실행한다.
-Docker 이미지는 공식 PJSIP 2.17 소스를 SHA-256 검증 후 빌드한다.
-
-```bash
-make pjsua-build
-make pjsua-setup
-```
-
-`pjsua-setup`은 고객 `1001`, 상담원 `1002`의 임의 비밀번호와 설정을 `asterisk/local/`에
-생성한다. 재실행 시 비밀번호를 유지한다. 이 디렉터리의 생성 파일과 `pjsua/artifacts/`는
-Git에서 제외된다. 최초 설정은 Asterisk 컨테이너를 재생성하므로 진행 중인 테스트 통화를
-종료한 뒤 실행한다. 이후에는 계정 설정을 reload하며, 나머지 서비스와 volume은 유지한다.
-
-두 터미널에서 각각 실행한다.
-
-```bash
-# 상담원: 수신 통화 자동 응답
-make pjsua-agent
-
-# 고객: CLI에서 아래 call 명령 사용
-make pjsua-caller
-```
-
-```text
-call new sip:600@asterisk     # 에코 테스트
-call dump_q                  # RTP 송수신 통계
-call hangup
-call new sip:601@asterisk     # DTMF 4자리 수신 테스트
-call d_2833 1234
-call hangup
-call new sip:1002@asterisk    # 상담원 내선 통화
-call hangup
-shutdown
-```
-
-위 주석은 설명용이며 실제 CLI에는 `#` 앞의 명령만 입력한다. `601`에서 받은 숫자는
-Asterisk 로그의 `PJSUA_DTMF_RESULT=1234`로 확인한다. SIP 인증, G.711 RTP,
-RFC 4733 DTMF를 실제 전송한다. 기본 `--null-audio` 모드는 Mac 마이크와 스피커를 사용하지 않는다.
-WAV 파일은 `pjsua/artifacts/`에 넣고 컨테이너의 `/artifacts/` 경로로 재생·녹음할 수 있다.
-
-```bash
-bash scripts/pjsua.sh caller --play-file=/artifacts/input.wav --auto-play \
-  --rec-file=/artifacts/echo.wav --auto-rec sip:600@asterisk
-# 거절 / 수동 응답(무응답 시나리오): make pjsua-agent 대신 하나만 실행
-bash scripts/pjsua.sh agent --auto-answer=486
-bash scripts/pjsua.sh agent
-```
-
-`82000`은 기존 LiveKit inbound `2000`으로 연결한다. 실제 AI 통화에는 API의 전화번호·publication
-바인딩과 Worker 설정이 별도로 필요하다. LiveKit outbound에서 `1001`/`1002`를 호출하면
-해당 등록 단말로 연결하며, 다른 번호의 기존 에코 경로는 유지한다.
-단말은 `shutdown`으로 종료하면 컨테이너도 제거된다. 로컬 SIP 테스트는 통신사 PSTN 검증을 포함하지 않는다.
+## 연결과 health 검증
 
 로컬 Compose는 `adaptor-api-tls` Caddy proxy가 API 앞에서 내부 CA 기반 HTTPS를 제공한다.
 Adaptor는 해당 CA를 `NODE_EXTRA_CA_CERTS`로 신뢰하고
 `https://adaptor-api-tls/api/v1/access-tokens/identity`에서 PAT identity를 검증한다.
 `PUBLIC_BASE_URL`은 `http://macbookpro:3002`로 유지한다.
 
-`make health`는 각 컨테이너의 liveness smoke와 LiveKit TCP 포트 검사를 수행한다. Voice Agent의 metrics endpoint는
-process liveness만 보장하며 LiveKit registration은 logs와 별도 manual smoke로 확인한다.
+`make health`는 앱의 HTTP liveness와 Worker의 LiveKit Cloud 등록 readiness를 확인한다.
+Worker의 Compose healthcheck와 Make 명령은 컨테이너 내부 SDK endpoint `http://127.0.0.1:8081/`을 사용한다.
+등록이 완료되고 WebSocket이 연결된 상태에서 HTTP 200을 반환하며, 연결되지 않으면 503을 반환한다.
+이 포트는 호스트에 공개하지 않는다. 기존 `19091/metrics`는 관측용이며 Cloud 등록 검사를 대신하지 않는다.
 Native auth, Web→API, API→RAG 연동도 별도 manual smoke로 확인한다. Aggregator는 distroless
 이미지라 컨테이너 healthcheck 대신 host smoke (`3001/healthz`)를 사용한다.
 
@@ -650,8 +604,20 @@ Native auth, Web→API, API→RAG 연동도 별도 manual smoke로 확인한다.
 실제 환경에서는 SMTP를 설정하고 `NODE_ENV=production`으로 실행해야 하며, 인증 코드를
 응답이나 로그로 노출하면 안 된다. `MAIL_HOST`, `MAIL_USER`, `MAIL_PASS`는 이 로컬 설정에 넣지 않는다.
 
-Manual smoke checklist: native auth → Web→API→RAG→Voice→LiveKit registration 순서로
-로그인, API 호출, RAG 요청, Voice bootstrap, LiveKit room 접속을 확인한다.
+Manual smoke checklist: native auth → Web→API→RAG→Voice→LiveKit Cloud 순서로
+로그인, API 호출, RAG 요청, Voice bootstrap, Cloud room의 데이터·오디오 송수신을 확인한다.
+
+2026-10-01 LiveKit Cloud 전환 검증:
+
+- API와 Worker만 재생성한 뒤 두 컨테이너가 Healthy이고, 실제 배포 Worker의 내부 `8081/`이 HTTP 200을 반환했다.
+  양쪽 접속 주소는 `wss://dubu-mkgk6hgc.livekit.cloud`이며 배포 API의 인증된 Cloud `listRooms` 호출이 성공했다.
+- 실제 Worker 이미지의 RTC smoke에서 Cloud 참가자 2명, reliable data 전달, 16kHz의 무음이 아닌 오디오 수신을 확인했다.
+  room recording은 비활성 상태였고 세션 시작은 명시적인 `record:false`를 사용한다.
+  검증 room을 정리한 뒤 남은 smoke room은 0개였다. 이 결과는 전체 STT/AI 통화나 외부 전화 검증을 의미하지 않는다.
+- 실제 배포 API의 `application/webhook+json` 요청은 올바른 서명에서 HTTP 200, 변조·서명 누락에서 401을 반환했다.
+  Cloud에서 공개 endpoint로 보내는 전송 경로는 검증하지 않았다.
+- 전환 중 다른 컨테이너 11개와 기존 이미지는 유지했다. API는 `port-api:livekit-cloud-fe95496`,
+  Worker는 `port-voice-agent:livekit-cloud-tls-606796d`를 사용하며 마지막 이미지 overlay에 고정했다.
 
 ## Tailscale 접속
 

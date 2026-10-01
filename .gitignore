@@ -19,5 +19,4 @@ config/*.local.yaml
 !config/*.local.example.yaml
 
 asterisk/local/*
-!asterisk/local/.gitkeep
 pjsua/artifacts/

@@ -12,15 +12,12 @@ endif
 
 INFRA_SERVICES := postgres redis
 APP_SERVICES := api web rag voice-agent aggregator adaptor
-PULL_SERVICES := $(APP_SERVICES) api-migrator rag-migrator livekit
-LOG_SERVICES := $(APP_SERVICES) livekit
+PULL_SERVICES := $(APP_SERVICES) api-migrator rag-migrator
+LOG_SERVICES := $(APP_SERVICES)
 CHANGED_SERVICES ?= api
 API_PORT ?= 8000
 WEB_PORT := 3000
 RAG_PORT ?= 8001
-VOICE_AGENT_METRICS_PORT ?= 19091
-LIVEKIT_PORT ?= 7880
-LIVEKIT_SIP_HEALTH_PORT ?= 18090
 AGGREGATOR_PORT ?= 3001
 ADAPTOR_PORT := 3002
 HEALTH_RETRIES ?= 30
@@ -35,7 +32,7 @@ ifeq ($(strip $(CHANGED_SERVICES)),)
 $(error CHANGED_SERVICES must not be empty)
 endif
 
-.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs openbao-tls openbao-up openbao-status openbao-init openbao-unseal openbao-snapshot openbao-app-role openbao-down openbao-logs tools-up tools-down observability-up observability-down observability-logs telephony-up telephony-provision telephony-health telephony-logs telephony-down db-ensure-user tailscale-direct dev-up dev-logs dev-stop test up down ps
+.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs openbao-tls openbao-up openbao-status openbao-init openbao-unseal openbao-snapshot openbao-app-role openbao-down openbao-logs tools-up tools-down observability-up observability-down observability-logs db-ensure-user tailscale-direct dev-up dev-logs dev-stop test up down ps
 
 colima-start:
 	colima start --vm-type vz --runtime docker --cpus 4 --memory 6 --disk 60
@@ -57,9 +54,9 @@ recreate:
 health:
 	@set -eu; \
 	attempt=1; \
-	while ! nc -z 127.0.0.1 $(LIVEKIT_PORT) >/dev/null 2>&1; do \
+	while ! $(COMPOSE) exec -T voice-agent node -e "fetch('http://127.0.0.1:8081/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" >/dev/null 2>&1; do \
 		if [ "$${attempt}" -ge "$(HEALTH_RETRIES)" ]; then \
-			echo "health check failed: livekit tcp 127.0.0.1:$(LIVEKIT_PORT)" >&2; exit 1; \
+			echo "health check failed: voice-agent LiveKit registration readiness" >&2; exit 1; \
 		fi; \
 		attempt=$$((attempt + 1)); sleep "$(HEALTH_INTERVAL)"; \
 	done; \
@@ -67,7 +64,6 @@ health:
 		"api|http://127.0.0.1:$(API_PORT)/api/v1/health" \
 		"web|http://127.0.0.1:$(WEB_PORT)/" \
 		"rag|http://127.0.0.1:$(RAG_PORT)/healthz" \
-		"voice-agent|http://127.0.0.1:$(VOICE_AGENT_METRICS_PORT)/metrics" \
 		"aggregator|http://127.0.0.1:$(AGGREGATOR_PORT)/healthz" \
 		"adaptor|http://127.0.0.1:$(ADAPTOR_PORT)/healthz"; do \
 		name=$${check%%|*}; url=$${check#*|}; attempt=1; \
@@ -157,38 +153,6 @@ observability-down:
 
 observability-logs:
 	$(COMPOSE) --profile observability logs -f prometheus grafana
-
-telephony-up:
-	$(COMPOSE) --profile telephony up -d --wait livekit-sip asterisk
-
-telephony-provision: telephony-up
-	COMPOSE="$(COMPOSE)" bash scripts/sip-provision.sh
-
-telephony-health:
-	@curl -fsS "http://127.0.0.1:$(LIVEKIT_SIP_HEALTH_PORT)" >/dev/null
-	@$(COMPOSE) --profile telephony exec -T asterisk asterisk -rx 'pjsip show endpoint livekit' | grep -q 'Endpoint:  livekit'
-	@$(COMPOSE) --profile telephony ps livekit-sip asterisk
-
-telephony-logs:
-	$(COMPOSE) --profile telephony logs --tail=100 livekit-sip asterisk
-
-telephony-down:
-	$(COMPOSE) --profile telephony stop livekit-sip asterisk livekit-cli
-
-.PHONY: pjsua-build pjsua-setup pjsua-caller pjsua-agent
-pjsua-build:
-	docker --context "$${DOCKER_CONTEXT:-colima}" build -t port-pjsua:2.17 pjsua
-
-pjsua-setup:
-	python3 scripts/pjsua-setup.py
-	$(COMPOSE) --profile telephony up -d --no-deps --wait asterisk
-	$(COMPOSE) --profile telephony exec -T asterisk asterisk -rx 'pjsip reload'
-
-pjsua-caller:
-	bash scripts/pjsua.sh caller
-
-pjsua-agent:
-	bash scripts/pjsua.sh agent --auto-answer=200
 
 db-ensure-user:
 	$(COMPOSE) up -d postgres
