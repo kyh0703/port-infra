@@ -19,21 +19,15 @@ grep -Fq 'context: ../api' compose.dev.yml
 grep -Fq 'context: ../web' compose.dev.yml
 grep -Fq '../api:/app' compose.dev.yml
 grep -Fq '../web:/app' compose.dev.yml
-grep -Fq '$(DEV_COMPOSE) up -d --build --no-deps api web' Makefile
-grep -Fq '$(DEV_COMPOSE) stop api web' Makefile
 grep -Fq 'stack/volumes' README.md
 grep -Fq 'idempotent' README.md
 grep -Fq '$(COMPOSE) pull $(PULL_SERVICES)' Makefile
 grep -Fq '$(COMPOSE) up -d --no-deps --force-recreate $(CHANGED_SERVICES)' Makefile
 grep -Fq '$(COMPOSE) ps' Makefile
 grep -Fq '$(COMPOSE) logs --tail=100 $(LOG_SERVICES)' Makefile
-grep -Fq 'API_PORT ?= 8000' Makefile
-grep -Fq 'WEB_PORT := 3000' Makefile
 grep -Fq 'RAG_PORT ?= 8001' Makefile
 grep -Fq 'AGGREGATOR_PORT ?= 3001' Makefile
 grep -Fq 'ADAPTOR_PORT := 3002' Makefile
-grep -Fq '"api|http://127.0.0.1:$(API_PORT)/api/v1/health"' Makefile
-grep -Fq '"web|http://127.0.0.1:$(WEB_PORT)/"' Makefile
 grep -Fq '"rag|http://127.0.0.1:$(RAG_PORT)/healthz"' Makefile
 grep -Fq '$(COMPOSE) run --rm --no-deps api-migrator' Makefile
 grep -Fq '$(COMPOSE) run --rm --no-deps rag-migrator' Makefile
@@ -50,42 +44,15 @@ grep -Fq 'bash tests/commands.sh' Makefile
 grep -Fq 'openbao-app-role:' Makefile
 grep -Fq 'python3 scripts/openbao-app-role.py' Makefile
 
-grep -Fq 'tailscale-direct' Makefile
-grep -Fq 'tailscale serve reset' Makefile
-grep -Fq 'tailscale funnel reset' Makefile
-grep -Fq 'tailscale serve status --json' Makefile
-grep -Fq 'tailscale funnel status --json' Makefile
-if grep -Eq '^(deploy|recreate|health):.*tailscale-direct' Makefile; then
-  echo 'tailscale cleanup must remain explicit' >&2
+# Inspect the executable plan, not the Makefile spelling: this operation must
+# target only our HTTPS listener, never another listener or the global state.
+ingress_plan=$(make -n tailscale-ingress COMPOSE=true INGRESS_PORT=18088)
+[[ "$ingress_plan" == *'--https=8443'* ]]
+[[ "$ingress_plan" == *'http://127.0.0.1:18088'* ]]
+if [[ "$ingress_plan" == *'reset'* || "$ingress_plan" == *'funnel'* || "$ingress_plan" == *'--https=443'* ]]; then
+  echo 'ingress activation must not modify global Tailscale state or Serve 443' >&2
   exit 1
 fi
-
-assert_tailscale_command_forms() {
-  local file=$1
-  local line service action
-  while IFS= read -r line; do
-    [[ "$line" =~ tailscale[[:space:]]+(serve|funnel)[[:space:]]+([^[:space:]]+) ]] || continue
-    service=${BASH_REMATCH[1]}
-    action=${BASH_REMATCH[2]}
-    if [[ "$action" != 'reset' && "$action" != 'status' ]]; then
-      echo "tailscale $service activation is forbidden: $line" >&2
-      return 1
-    fi
-  done < "$file"
-}
-
-assert_tailscale_command_forms Makefile
-assert_tailscale_command_forms README.md
-for forbidden in \
-  'tailscale serve localhost:3000' \
-  'tailscale serve http+insecure://localhost:3000' \
-  'tailscale serve unix:/tmp/web.sock' \
-  'tailscale funnel localhost:3000'; do
-  if assert_tailscale_command_forms <(printf '%s\n' "$forbidden"); then
-    echo "forbidden Tailscale activation was accepted: $forbidden" >&2
-    exit 1
-  fi
-done
 
 if grep -Fq 'VOICE_AGENT_HEALTH_PORT' .env.example; then
   echo 'VOICE_AGENT_HEALTH_PORT must not be present' >&2

@@ -11,18 +11,17 @@ export
 endif
 
 INFRA_SERVICES := postgres redis
-APP_SERVICES := api web rag voice-agent aggregator adaptor
+APP_SERVICES := ingress api web rag voice-agent aggregator adaptor
 PULL_SERVICES := $(APP_SERVICES) api-migrator rag-migrator
 LOG_SERVICES := $(APP_SERVICES)
 CHANGED_SERVICES ?= api
-API_PORT ?= 8000
-WEB_PORT := 3000
+INGRESS_PORT ?= 8088
 RAG_PORT ?= 8001
 AGGREGATOR_PORT ?= 3001
 ADAPTOR_PORT := 3002
 HEALTH_RETRIES ?= 30
 HEALTH_INTERVAL ?= 2
-COMPOSE_ALLOWLIST := api web rag voice-agent aggregator adaptor
+COMPOSE_ALLOWLIST := ingress api web rag voice-agent aggregator adaptor
 INVALID_CHANGED_SERVICES := $(filter-out $(COMPOSE_ALLOWLIST),$(CHANGED_SERVICES))
 
 ifneq ($(strip $(INVALID_CHANGED_SERVICES)),)
@@ -32,7 +31,7 @@ ifeq ($(strip $(CHANGED_SERVICES)),)
 $(error CHANGED_SERVICES must not be empty)
 endif
 
-.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs openbao-tls openbao-up openbao-status openbao-init openbao-unseal openbao-snapshot openbao-app-role openbao-down openbao-logs tools-up tools-down observability-up observability-down observability-logs db-ensure-user tailscale-direct dev-up dev-logs dev-stop test up down ps
+.PHONY: colima-start pull deploy recreate health logs infra-up infra-down infra-logs openbao-tls openbao-up openbao-status openbao-init openbao-unseal openbao-snapshot openbao-app-role openbao-down openbao-logs tools-up tools-down observability-up observability-down observability-logs db-ensure-user tailscale-ingress dev-up dev-logs dev-stop test test-ingress up down ps
 
 colima-start:
 	colima start --vm-type vz --runtime docker --cpus 4 --memory 6 --disk 60
@@ -61,8 +60,8 @@ health:
 		attempt=$$((attempt + 1)); sleep "$(HEALTH_INTERVAL)"; \
 	done; \
 	for check in \
-		"api|http://127.0.0.1:$(API_PORT)/api/v1/health" \
-		"web|http://127.0.0.1:$(WEB_PORT)/" \
+		"ingress-api|http://127.0.0.1:$(INGRESS_PORT)/api/v1/health" \
+		"ingress-web|http://127.0.0.1:$(INGRESS_PORT)/" \
 		"rag|http://127.0.0.1:$(RAG_PORT)/healthz" \
 		"aggregator|http://127.0.0.1:$(AGGREGATOR_PORT)/healthz" \
 		"adaptor|http://127.0.0.1:$(ADAPTOR_PORT)/healthz"; do \
@@ -80,13 +79,13 @@ logs:
 	$(COMPOSE) logs --tail=100 $(LOG_SERVICES)
 
 dev-up:
-	$(DEV_COMPOSE) up -d --build --no-deps api web
+	$(DEV_COMPOSE) up -d --build --no-deps api web ingress
 
 dev-logs:
-	$(DEV_COMPOSE) logs -f api web
+	$(DEV_COMPOSE) logs -f api web ingress
 
 dev-stop:
-	$(DEV_COMPOSE) stop api web
+	$(DEV_COMPOSE) stop ingress api web
 
 openbao-tls:
 	bash scripts/openbao-tls.sh
@@ -158,17 +157,19 @@ db-ensure-user:
 	$(COMPOSE) up -d postgres
 	$(COMPOSE) exec -T --user postgres postgres sh /docker-entrypoint-initdb.d/01-ensure-port-user.sh
 
-tailscale-direct:
-	tailscale serve reset
-	tailscale funnel reset
+tailscale-ingress:
+	tailscale serve --bg --https=8443 http://127.0.0.1:$(INGRESS_PORT)
 	tailscale serve status --json
-	tailscale funnel status --json
 
 test:
 	python3 tests/test_internal_key_init.py
 	python3 -m unittest discover -s tests -p 'test_openbao*.py'
 	COMPOSE="$(COMPOSE)" bash tests/compose.sh
 	bash tests/commands.sh
+	$(MAKE) test-ingress
+
+test-ingress:
+	python3 tests/test_ingress.py
 
 up: openbao-tls
 	$(COMPOSE) up -d
