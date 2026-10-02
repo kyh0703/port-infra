@@ -1,0 +1,12 @@
+# Final locally-built arm64 Web image; this is not a GHCR digest.
+# Import the protected archive or rebuild the exact recorded source before use.
+# Base 9f9f88a713eb14f8947d83ce6bd4fb920c1c2dca, history fix e45dd0ad988602f75b60d2453b1852397154cf1f.
+# Existing ingress patch SHA256: 38871827be8e6e659891dcf68f4f821934bca740fda3854b3e1192473e1c5ad6.
+# Excludes unreleased subscription/billing main changes.
+# Append AFTER the complete current Compose chain, including trusted-ingress.
+# Keep its canonical HTTPS authority, trusted edge CIDR, ports, env and networks.
+# Recreate only web with --no-deps --pull never --wait; do not reset other images.
+services:
+  web:
+    image: sha256:aff59c4f7d9ad1d4880706a2d1a64715db1e23bf1c310bf8dc40b2e09efa43f2
+    pull_policy: never

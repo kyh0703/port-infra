@@ -172,6 +172,46 @@ Compose project name은 `infra`로 고정하므로 worktree가 달라도 같은 
 실행 중인 stack을 변경할 때는 기존 Compose `-f` 목록을 유지하고 이 파일을 마지막에 적용한다.
 기본 이미지 운영용인 위 `make deploy`·`make recreate`를 그대로 실행해 현재 릴리스를 교체하지 않는다.
 
+#### Spaces Supervisor 릴리스 (2026-10-02)
+
+초기 feature image pin은 `config/spaces-supervisor-main.local.example.yaml`에 있다.
+이는 이미지 전용 overlay다. 현재 서비스의 전체 Compose 파일 목록·프로젝트명 `infra`·환경변수·
+mount·port·network를 유지한다. 그 뒤 추가된 trusted-ingress 설정도 되돌리지 않는다.
+`make deploy`로 최신 main 이미지를 무작정 적용하지 않는다. Web main에 합쳐진 월 구독 변경은
+이번 Spaces 배포 범위가 아니며, 기존 billing API와 혼합 배포하면 안 된다.
+
+현재 Web은 `config/spaces-supervisor-history.local.example.yaml`의 local immutable image
+`sha256:aff59c4f7d9ad1d4880706a2d1a64715db1e23bf1c310bf8dc40b2e09efa43f2`를 사용한다.
+release-compatible source `9f9f88a7`에 history fix `e45dd0ad`와 기존 실행 중인 ingress patch
+`38871827`만 결합했다. 이 image 전용 overlay는 **기존 전체 파일 목록의 마지막**, 특히
+`trusted-ingress.local.yaml` 뒤에 둔다. 파일만 복사해 다른 호스트에 배포할 수는 없다.
+먼저 보호된 image archive를 `docker image load --input`으로 가져오거나 동일 source patch로 빌드해야 한다.
+파일 예제의 `pull_policy: never`는 다른 image로 조용히 바뀌는 것을 막는다.
+
+접속 주소는 `https://macbookpro.tail9f349d.ts.net:8443/spaces`다. Tailscale 접속이 필요하다.
+기존 `macbookpro:3000`·직접 API 포트는 재개방하지 않는다. Compose 설정을 재평가할 때는
+실행 중인 ingress의 `INGRESS_PUBLIC_AUTHORITY`, `INGRESS_TRUSTED_EDGE_CIDR`,
+`INGRESS_PORT`도 유지한다. 최종 history fix는 `up --no-deps --pull never --wait web`으로
+Web만 교체했으며 API·worker·Caddy 설정과 다른 서비스/볼륨을 변경하지 않았다.
+
+DB cutover 전에 custom-format dump와 roles를 보호된
+`backups/db/spaces-supervisor-main-20261002T093415Z/`에 저장했다.
+별도 PostgreSQL에 실제 전체 restore 후 Spec `4dc0cf0f`의 두 UP migration,
+`node scripts/upgrade-spaces-v2.mjs` dry-run, `--apply`, 반복 실행을 검증했다.
+초기 운영 ledger는 157→159가 됐다. v1 Space 1건을 보호된 Supervisor root를 가진 numeric v2로
+한 번만 변환했다. API GET-time 변환은 없다. 동시 작업으로 나중에 추가된 migration을 내리지 않는다.
+실제 서비스의 quiescence와 Cloud room/participant drain 뒤 초기 유지보수는 약 80초였다.
+원본 Agent 11건·발행본 36건은 복원본과 모든 원본 필드를 대조해 보존을 확인했다.
+백업 복원은 새 데이터 유실을 일으킬 수 있으므로 자동 rollback이나 SQL DOWN을 실행하지 않는다.
+
+최종 HTTPS에서 첫 메시지 응답, immutable solo publication, 실제 전문가 `agent_task` 완료와
+Supervisor 복귀, drag/content 독립성, 모바일 삭제·포커스와 실제 Back/Forward/±2 취소를 확인했다.
+Chrome history 50개 한도에서도 native fragment/router state와 초안이 유지됐다.
+검증 Space·통화 이력은 정식 API로 삭제하고 로그아웃했다. 테스트 계정 탈퇴는 잔여 interaction
+session 4건 때문에 `409 WITHDRAWAL_ACTIVE_WORK`로 거절됐다. 실제 Cloud room/participant,
+진행 중 통화·audit·usage는 0이다. 계정과 signup 기본 데이터는 보존했고 DB fence를 우회하거나
+가짜 webhook을 보내지 않았다. 상세 증거·image archive·재현 patch는 보호된 배포 백업에 있다.
+
 ### Jev 음성사서함 감지 (선택)
 
 OpenRouter 키를 등록하는 것만으로 감지가 활성화되지는 않는다. API와 worker 양쪽의
