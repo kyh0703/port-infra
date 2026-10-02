@@ -433,6 +433,20 @@ host/Tailnet의 직접 Web/API HTTP 접속과 Tailnet→ingress `8088` 접속은
 별도 Serve `443`과 나머지 컨테이너 8개의 ID, 기존 credential/cache volume과 API 환경파일은 유지했다.
 Ghost profile은 실행하지 않았다. 문의 링크의 새 HTTPS 목적지는 실제 `200`으로 확인했다.
 
+2026-10-03 main 병합 후 경로 전환:
+
+- API/Web/ingress의 Compose base·working directory·환경파일과 Caddy bind mount는
+  primary infra 경로다. 실행 컨테이너의 배포 경로에 `.worktrees/` 참조가 없음을 확인했다.
+  서비스별 release overlay 체인·기존 이미지·볼륨을 유지한 채 세 서비스만 재생성했다.
+- HTTPS login/health는 `200`, `/api/v1`은 API JSON `404`, 인접 `/api/v10`은 Web HTML `404`다.
+  잘못된 cookie 로그인은 `401`, 과거 HTTP/위조 origin은 `403`이고 인증 쿠키는 발급하지 않았다.
+  두 trusted-edge IP는 별도 예산을 썼고, 위조 XFF·대체 IP 헤더는 실제 peer 예산에만 반영됐다.
+  직접 Web/API 및 Tailnet ingress HTTP 포트는 거부됐으며 별도 Serve와 다른 8개 컨테이너는 유지됐다.
+- API 최초 기동의 wait는 PostgreSQL 인증 오류 `28P01`로 실패했다. 같은 설정의 3회 재시작 뒤
+  healthy와 실제 HTTP 응답을 확인했다. 비밀번호 수정이나 데이터 삭제는 수행하지 않았다.
+- 이후 병행 릴리스가 API `7ccf6246`·Web `0a94a29b` main 이미지를 발행·적용했다.
+  최신 release overlay를 덮어쓰지 않았으며 두 서비스는 healthy이고 primary 경로를 유지한다.
+
 Colima 설정은 Docker 전용 4코어/6GB이며 Kubernetes를 설치하지 않는다.
 
 기본 서비스:
