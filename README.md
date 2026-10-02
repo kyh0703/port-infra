@@ -177,16 +177,18 @@ Compose project name은 `infra`로 고정하므로 worktree가 달라도 같은 
 초기 feature image pin은 `config/spaces-supervisor-main.local.example.yaml`에 있다.
 이는 이미지 전용 overlay다. 현재 서비스의 전체 Compose 파일 목록·프로젝트명 `infra`·환경변수·
 mount·port·network를 유지한다. 그 뒤 추가된 trusted-ingress 설정도 되돌리지 않는다.
-`make deploy`로 최신 main 이미지를 무작정 적용하지 않는다. Web main에 합쳐진 월 구독 변경은
-이번 Spaces 배포 범위가 아니며, 기존 billing API와 혼합 배포하면 안 된다.
+`make deploy`로 main 이미지를 무작정 혼합 적용하지 않는다. 전체 Web main과 기존 billing API를
+혼합하지 말고, 실행 중인 matched API/Web release와 overlay 우선순위를 함께 유지한다.
 
-현재 Web은 `config/spaces-supervisor-history.local.example.yaml`의 local immutable image
-`sha256:aff59c4f7d9ad1d4880706a2d1a64715db1e23bf1c310bf8dc40b2e09efa43f2`를 사용한다.
-release-compatible source `9f9f88a7`에 history fix `e45dd0ad`와 기존 실행 중인 ingress patch
-`38871827`만 결합했다. 이 image 전용 overlay는 **기존 전체 파일 목록의 마지막**, 특히
-`trusted-ingress.local.yaml` 뒤에 둔다. 파일만 복사해 다른 호스트에 배포할 수는 없다.
-먼저 보호된 image archive를 `docker image load --input`으로 가져오거나 동일 source patch로 빌드해야 한다.
-파일 예제의 `pull_policy: never`는 다른 image로 조용히 바뀌는 것을 막는다.
+현재 Web pin은 `config/spaces-supervisor-history.local.example.yaml`의 GHCR digest
+`sha256:ea2cd8ac8e11b10309e154bf07f9fdcc120e0853ffa8f9ddc7ca1dbd7d4e7b72`다.
+동시 trusted-ingress rollout의 source `0a94a29b`에 Spaces first-message/history fix가 포함됨을 확인했다.
+현재 API는 source `7ccf6246`의 `sha256:bd36f1f73ac84ec2771507f89663da8bda1761565477dae7a454478c74f04c7c`다.
+기존 전체 Compose chain을 보존한 채 최종 Web pin을 적용한다. `pull_policy: never`이므로 먼저
+정확한 digest를 pull한다. 초기 local image `aff59c4f`와 재현 patch는 보호된 백업에 남겼지만,
+이후 main rollout을 자동으로 되돌리는 용도로 사용하지 않는다.
+API와 Web의 실제 Compose 파일 목록은 서로 다를 수 있다. Web 파일 목록으로 API까지
+재생성하지 않는다. image 전용 Web pin은 반드시 `--no-deps`와 서비스명 `web`으로 한정한다.
 
 접속 주소는 `https://macbookpro.tail9f349d.ts.net:8443/spaces`다. Tailscale 접속이 필요하다.
 기존 `macbookpro:3000`·직접 API 포트는 재개방하지 않는다. Compose 설정을 재평가할 때는
