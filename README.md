@@ -377,8 +377,8 @@ UI 글꼴은 Pretendard Variable v1.3.9를 jsDelivr에서 동적 서브셋으로
   `ghost-content-init`은 content 볼륨 소유권만 초기화하고, Ghost는 `node` 사용자로 실행한다.
   테마 원본에는 소유권 변경을 하지 않는다.
 
-헤더 우측의 **문의하기**는 `http://macbookpro:3000/contact`로 이동한다.
-현재 주소는 같은 Tailnet 또는 해당 호스트에 접근 가능한 내부 네트워크에서만 사용할 수 있다.
+헤더 우측의 **문의하기**는 `https://macbookpro.tail9f349d.ts.net:8443/contact`로 이동한다.
+현재 주소는 같은 Tailnet에 참여한 기기에서 사용할 수 있다.
 RSS 링크는 유지하며 640px 이하에서는 헤더 RSS만 숨겨 문의 버튼 공간을 확보한다.
 본문을 64px 넘게 스크롤하면 기존 액션 바가 상단 중앙으로 이동한다.
 이 상태에서는 바에 20px 블러·채도 160%, 얇은 테두리와 안쪽 하이라이트를 적용하고
@@ -416,29 +416,76 @@ make dev-logs
 make dev-stop
 ```
 
-`dev-stop`은 `api`와 `web` 컨테이너만 중지하며 PostgreSQL·Redis 등 named volume은 삭제하지 않는다.
+`dev-stop`은 `ingress`·`api`·`web`만 중지하며 PostgreSQL·Redis 등 named volume은 삭제하지 않는다.
 `make dev-up` 실행 전에는 기본 Compose로 PostgreSQL, Redis와 같은 infra 의존 서비스가 이미
-실행 중이어야 하며, 이 명령은 API와 Web만 build/recreate한다.
+실행 중이어야 하며, 이 명령은 API·Web과 단일 ingress만 build/recreate한다.
 개발 모드는 primary infra 저장소 루트에서 실행해야 하며,
 API는 `NODE_ENV=development`, Web은 `pnpm dev`로 실행된다. 기본 이미지 기반 실행으로
 돌아가려면 `make up`을 사용한다.
 
-Tailscale은 host-level client만 사용한다. Tailnet 내부에서는 `http://macbookpro:3000`으로
-직접 접근하며 Serve, Funnel, 서비스별 Tailscale 컨테이너는 사용하지 않는다.
+## Web/API trusted ingress
 
-기존 Mac에 Tailscale Serve 또는 Funnel 설정이 남아 있으면 접근 host가 달라질 수 있다.
-배포나 일반 health 확인에 자동 연결하지 않은 명시적 cleanup 명령으로 한 번 정리한다.
+Tailnet HTTPS `:8443`은 host-level Tailscale Serve에서 loopback Caddy `:8088`로 연결한다.
+정확한 `/api/v1`과 `/api/v1/*`는 API `:8000`, 다른 경로는 Web `:3000`으로 직접 분기한다.
+Web의 Next API rewrite와 Web용 `API_INTERNAL_BASE_URL`은 제거했다. RAG의 내부 API 조회는 유지한다.
+Funnel이나 서비스별 Tailscale 컨테이너는 사용하지 않으며 인터넷 공개 ingress는 제공하지 않는다.
+
+root `.env`의 `INGRESS_PUBLIC_AUTHORITY`는 scheme/path 없는 canonical HTTPS `host:port`다.
+`INGRESS_PORT` 기본값은 `8088`이며 host publication은 `127.0.0.1`로 고정한다.
+API 환경파일의 `WEB_ORIGIN`·`API_PUBLIC_BASE_URL`·`GOOGLE_OAUTH_WEB_ORIGIN`은
+`https://${INGRESS_PUBLIC_AUTHORITY}`와 같아야 한다. `AUTH_SESSION_COOKIE_SECURE=true`로
+두 인증 cookie의 `Secure`·`__Host-` 기본값을 사용하고, 기존 직접 HTTP origin은 허용하지 않는다.
+
+전용 bridge `172.30.40.0/24`의 gateway는 `.1`, Caddy는 `.2`, API는 `.3`, Web은 `.4`다.
+Caddy는 실제 Mac→Colima peer인 `172.30.40.1/32`만 신뢰하고 XFF를 오른쪽부터 판독한다.
+API는 Caddy `172.30.40.2/32`만 신뢰한다. Caddy는 하나의 client IP로 XFF를 덮어쓰고
+`Forwarded`·`X-Real-IP`를 제거하며 Host/forwarded host/proto를 canonical HTTPS 값으로 설정한다.
+Web/API HTTP 포트는 호스트에 공개하지 않는다. gRPC `:8080`도 loopback에서만 사용할 수 있다.
+호스트와 Docker 관리권한은 신뢰 경계다. 비신뢰 프로세스와 공유하는 호스트에는 이 구성을 적용하지 않는다.
+다른 Docker 런타임에서 peer가 달라지면 먼저 실제 주소를 관측한다. private range나 hop 수로 완화하지 않는다.
 
 ```bash
-make tailscale-direct
+make tailscale-ingress
 tailscale serve status --json
-tailscale funnel status --json
-curl -I http://macbookpro:3000/
+curl -fsS https://macbookpro.tail9f349d.ts.net:8443/api/v1/health
 ```
 
-상태 JSON에 활성 web handler가 없어야 하며, 로그인은 반드시
-`http://macbookpro:3000`에서 시작한다. HTTPS `*.ts.net` Serve 주소나
-이전 `port-web` 장비 주소를 사용하지 않는다.
+활성화 명령은 HTTPS `8443`만 설정한다. global Serve/Funnel reset을 실행하지 않으며,
+별도 `443` handler는 유지한다. 중지는 `tailscale serve --https=8443 off`만 사용한다.
+
+운영 Compose base와 Caddyfile은 primary infra의 `compose.yml`·`ingress/Caddyfile`을 사용한다.
+API/Web 각각의 기존 Compose 파일 체인은 유지하고 비공개 `config/trusted-ingress.local.yaml`을
+적용한다. 기존 root `.env`와 `config/trusted-ingress.env`를 모두 `--env-file`로 전달해야 한다.
+배포 설정·환경파일·bind mount에 feature worktree 경로를 넣지 않는다.
+
+현재 릴리스의 이미지 선택값은 서비스별 마지막 overlay에 유지한다. 기본 `make deploy`/
+`recreate`로 기존 release overlay나 검증한 이미지를 덮어쓰지 않는다.
+main push와 GHCR 이미지 발행은 별도 작업이다. 이미지 변경은 main의 수동 `build-dev`
+발행 결과를 확인한 뒤 적용하며, 경로 정리만을 위해 실행 중인 이미지를 교체하지 않는다.
+
+검증: 실제 Caddy 회귀 9건에서 namespace·요청 본문/인증 헤더·strict IP·대체 헤더 제거·
+redirect/복수 cookie·SSE flush·양방향 WebSocket·credential redaction을 확인했다.
+실제 HTTPS API health와 PC/모바일 로그인 화면, 잘못된 로그인 `401`, 과거 HTTP origin `403`,
+canonical Google callback과 `Secure` OAuth state cookie를 확인했다. Google 계정 로그인 완료는 검증하지 않았다.
+trusted edge의 두 client IP는 별도 Redis 예산을 사용했고 HTTPS 위조 헤더는 실제 Tailnet IP 예산에만 반영됐다.
+비신뢰 Web peer의 직접 API/Caddy 요청도 전달 헤더를 신뢰하지 않았다.
+host/Tailnet의 직접 Web/API HTTP 접속과 Tailnet→ingress `8088` 접속은 거부됐다.
+별도 Serve `443`과 나머지 컨테이너 8개의 ID, 기존 credential/cache volume과 API 환경파일은 유지했다.
+Ghost profile은 실행하지 않았다. 문의 링크의 새 HTTPS 목적지는 실제 `200`으로 확인했다.
+
+2026-10-03 main 병합 후 경로 전환:
+
+- API/Web/ingress의 Compose base·working directory·환경파일과 Caddy bind mount는
+  primary infra 경로다. 실행 컨테이너의 배포 경로에 `.worktrees/` 참조가 없음을 확인했다.
+  서비스별 release overlay 체인·기존 이미지·볼륨을 유지한 채 세 서비스만 재생성했다.
+- HTTPS login/health는 `200`, `/api/v1`은 API JSON `404`, 인접 `/api/v10`은 Web HTML `404`다.
+  잘못된 cookie 로그인은 `401`, 과거 HTTP/위조 origin은 `403`이고 인증 쿠키는 발급하지 않았다.
+  두 trusted-edge IP는 별도 예산을 썼고, 위조 XFF·대체 IP 헤더는 실제 peer 예산에만 반영됐다.
+  직접 Web/API 및 Tailnet ingress HTTP 포트는 거부됐으며 별도 Serve와 다른 8개 컨테이너는 유지됐다.
+- API 최초 기동의 wait는 PostgreSQL 인증 오류 `28P01`로 실패했다. 같은 설정의 3회 재시작 뒤
+  healthy와 실제 HTTP 응답을 확인했다. 비밀번호 수정이나 데이터 삭제는 수행하지 않았다.
+- 이후 병행 릴리스가 API `7ccf6246`·Web `0a94a29b` main 이미지를 발행·적용했다.
+  최신 release overlay를 덮어쓰지 않았으며 두 서비스는 healthy이고 primary 경로를 유지한다.
 
 Colima 설정은 Docker 전용 4코어/6GB이며 Kubernetes를 설치하지 않는다.
 
@@ -568,10 +615,11 @@ make openbao-down
 
 | 서비스 | 호스트 포트 | 컨테이너 포트 |
 | --- | ---: | ---: |
-| Web | `3000` | `3000` |
+| Web | 없음 | `3000` |
 | Adaptor | `3002` | `3000` |
-| API HTTP | `8000` | `8000` |
-| API gRPC | `8080` | `8080` |
+| API HTTP | 없음 | `8000` |
+| API gRPC | `127.0.0.1:8080` | `8080` |
+| Trusted ingress | `127.0.0.1:8088` | `8088` |
 | RAG HTTP | `8001` | `8000` |
 | Voice Agent metrics | `19091` | `9091` |
 | Aggregator | `3001` | `3000` |
@@ -596,11 +644,11 @@ Cloud webhook 설정의 endpoint는 `https://<PUBLIC_API_DOMAIN>/api/v1/livekit/
 현재는 공개 HTTPS API 주소가 없어 Cloud의 자동 webhook 전송을 설정하거나 검증하지 않았다.
 Railway와 공개 호스팅은 별도 배포 범위이며, 로컬 수신 검증만으로 외부 전송이 준비됐다고 보지 않는다.
 
-API의 `WEB_ORIGIN`은 인증 리다이렉트에 사용하는 canonical 웹 주소이며, 로컬 Compose에서는
-`http://macbookpro:3000`을 유지한다. `WEB_ALLOWED_ORIGINS`는 canonical origin 외에 CORS와
-CSRF 검사에서 허용할 정확한 origin을 쉼표로 구분한 목록이다. 로컬 설정/example은
-`http://localhost:3000,http://localhost:3010`을 명시하며, 다른 localhost 포트나 wildcard를
-자동 허용하지 않는다. 추가 origin이 필요 없는 환경에서는 이 값을 비워 두거나 생략한다.
+API의 `WEB_ORIGIN`은 인증 리다이렉트에 사용하는 canonical HTTPS ingress origin이다.
+`WEB_ALLOWED_ORIGINS`는 canonical origin 외에 CORS와 CSRF 검사에서 허용할 정확한
+origin을 쉼표로 구분한 목록이며, 단일 ingress example과 현재 Mac 배포에서는 비워 둔다.
+개발용 추가 origin은 명시적으로 승인한 경우에만 설정한다. 다른 localhost 포트나
+wildcard를 자동 허용하지 않으며 과거 직접 Web HTTP origin은 호환 경로로 유지하지 않는다.
 허용 목록은 Origin 검사를 비활성화하지 않으며, CSRF 보호 요청에 Origin이 없으면 거부한다.
 
 ## 음성 미리듣기 저장과 생성 제한

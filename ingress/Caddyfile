@@ -1,0 +1,35 @@
+{
+	admin off
+	auto_https off
+	servers {
+		# Compose pins this to the dedicated bridge gateway, never private_ranges.
+		trusted_proxies static {$INGRESS_TRUSTED_EDGE_CIDR}
+		trusted_proxies_strict
+		client_ip_headers X-Forwarded-For
+	}
+}
+
+(trusted_upstream) {
+	# Send one resolved identity, not the attacker-controlled prefix of the chain.
+	header_up X-Forwarded-For {client_ip}
+	header_up -Forwarded
+	header_up -X-Real-IP
+	header_up Host {$INGRESS_PUBLIC_AUTHORITY}
+	header_up X-Forwarded-Host {$INGRESS_PUBLIC_AUTHORITY}
+	header_up X-Forwarded-Proto https
+}
+
+:8088 {
+	@api path /api/v1 /api/v1/*
+	handle @api {
+		reverse_proxy api:8000 {
+			import trusted_upstream
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000 {
+			import trusted_upstream
+		}
+	}
+}

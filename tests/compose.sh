@@ -135,7 +135,6 @@ jq -e '
   . as $root |
   (["DATABASE_URL", "REDIS_URL", "RAG_URL", "RAG_RETRIEVAL_CAPABILITY_SECRET", "WEB_ORIGIN", "AUTH_PASSWORD_RESET_SECRET", "AUTH_EMAIL_VERIFICATION_SECRET", "AUTH_RATE_LIMIT_SECRET", "WEB_CHAT_RESUME_TOKEN_SECRET", "AUTH_SESSION_COOKIE_SECURE", "AUTH_SESSION_TTL_SECONDS", "VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY"] | all(.[]; $root.services.api.environment[.] != null))
   and ([.services.api.environment | keys[] | select(test("KEYCLOAK|KC_"))] | length == 0)
-  and .services.api.environment.WEB_ORIGIN == "http://macbookpro:3000"
   and .services.api.environment.NODE_ENV == "local"
   and (.services.api.environment | has("AUTH_EMAIL_VERIFICATION_EXPOSE_DEBUG_CODE") | not)
   and (["MAIL_HOST", "MAIL_USER", "MAIL_PASS"] | all(.[]; ($root.services.api.environment[.] // "") == ""))
@@ -147,10 +146,31 @@ jq -e '
   . as $root |
   (["api", "web", "rag", "voice-agent", "adaptor"] | all(.[]; $root.services[.].healthcheck.test != null))
   and (.services."voice-agent".volumes | any(.target == "/app/config/local.yaml" and .read_only == true))
-  and (.services.api.ports | any(.published == "8000" and .target == 8000))
-  and (.services.web.ports | any(.published == "3000" and .target == 3000))
   and (.services.adaptor.ports | any(.published == "3002" and .target == 3000))
 ' >/dev/null <<<"${config}"
+
+# The base and development stacks must share the same HTTP trust boundary.
+assert_ingress_boundary() {
+  jq -e '
+    .networks.ingress.ipam.config[0] as $bridge |
+    .services.ingress.networks.ingress.ipv4_address as $proxy |
+    (.services.web.ports // [] | length == 0)
+    and (.services.api.ports | all(.target == 8080 and .host_ip == "127.0.0.1"))
+    and (.services.ingress.ports | length == 1)
+    and (.services.ingress.ports | all(.target == 8088 and .host_ip == "127.0.0.1"))
+    and (.services.ingress.networks | keys == ["ingress"])
+    and $bridge.subnet == "172.30.40.0/24"
+    and $bridge.gateway == "172.30.40.1"
+    and $proxy == "172.30.40.2"
+    and .services.api.networks.ingress.ipv4_address == "172.30.40.3"
+    and .services.web.networks.ingress.ipv4_address == "172.30.40.4"
+    and .services.ingress.environment.INGRESS_TRUSTED_EDGE_CIDR == ($bridge.gateway + "/32")
+    and .services.api.environment.API_TRUSTED_PROXY_CIDRS == ($proxy + "/32")
+  ' >/dev/null <<<"$1"
+}
+
+assert_ingress_boundary "${config}"
+assert_ingress_boundary "${dev_config}"
 
 jq -e '
   (.services.api.extra_hosts | any(. == "macbookpro=host-gateway"))
