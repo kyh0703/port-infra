@@ -3,6 +3,13 @@
 로컬 개발에 필요한 상태 저장 서비스와 애플리케이션을 Docker Compose로 실행한다.
 애플리케이션은 각 저장소가 GHCR에 발행한 `:dev` 이미지를 사용한다.
 
+## Personal Space 런타임과 배포
+
+[Personal Space 런타임과 배포 경계](docs/personal-space-runtime.md)는 Save·UI Deploy와
+컨테이너 rollout의 차이, 서비스별 책임, 예약 앱 수신 통화의 미구현 범위를 정리한다.
+2026-10-04 full-canvas 릴리스 기록과 기존 Compose/env 체인을 보존하는 Web 단독 교체·rollback,
+데이터를 지우지 않는 Docker 정리 범위도 이 문서에서 확인한다.
+
 ## Grafana Cloud 로그 수집 (선택)
 
 `compose.logs.yml`은 독립된 `infra-logs` 프로젝트로 Alloy와 Docker 로그 프록시만
