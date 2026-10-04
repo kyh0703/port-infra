@@ -1,0 +1,19 @@
+# Initial Spaces Supervisor cutover: image-only, no env/mount/port/network changes.
+# Copy to the ignored .local.yaml only after pulling these exact immutable images.
+# Preserve every existing service-specific Compose overlay. Later trusted-ingress
+# and final history overlays must retain their existing higher precedence.
+# API d71f84ff / Web 9f9f88a7 / worker e1b7feac / contracts 7.19.0.
+# Canonical migration source: port-spec 4dc0cf0f75105fe749bd786549056568d88a0c4e.
+services:
+  api:
+    image: ghcr.io/kyh0703/port-api@sha256:7d6c11cb23daf8e82ff8bce639a2584f929d640e8aaed62418b490620a544ed1
+    pull_policy: never
+  api-migrator:
+    image: ghcr.io/kyh0703/port-api@sha256:883c770928f62e694ed535e6a1960902e8b18d89652116d1bc05cc32c37c1199
+    pull_policy: never
+  web:
+    image: ghcr.io/kyh0703/port-web@sha256:32af174beb1631aadb812bdcb0dbe4b967e641aba884ad78253fabaaf7ca128c
+    pull_policy: never
+  voice-agent:
+    image: ghcr.io/kyh0703/port-voice-agent@sha256:6bd340abbb3417a0b8305478de70ec701e7222cd4c7830a789c9166a8043757a
+    pull_policy: never
