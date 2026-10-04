@@ -3,6 +3,73 @@
 로컬 개발에 필요한 상태 저장 서비스와 애플리케이션을 Docker Compose로 실행한다.
 애플리케이션은 각 저장소가 GHCR에 발행한 `:dev` 이미지를 사용한다.
 
+## 무응답 자동 종료 opt-in 배포 — 2026-10-04
+
+로컬 Mac/Colima의 Compose project `infra`에 적용했다. 미디어는 기존 LiveKit Cloud를
+유지한다. 원격 Kubernetes/GitOps 배포 기록이 아니다.
+
+| 대상 | 배포 소스 |
+| --- | --- |
+| API·migrator | `4739b239f7d1c01a97c4db66883346f208779a30` |
+| voice-agent | `5a1f2a182afbdb987bc2df478c3c25370db82ca3` |
+| Web | `3f58674f304b27df7d18e892cab81fc232c00fc3` |
+| contracts / Spec migration | `7.20.0` / `bda3e69a73bcd0b7266baf217e3ba0be19a33a7c` |
+
+이미지 digest는 [릴리스 override 예제](config/silence-opt-in-20261004.local.example.yaml)에
+고정했다. API·worker의 최초 빌드는 삭제된 contracts 7.19.0 archive를 Dockerfile이
+참조해 실패했다. COPY를 7.20.0으로 맞춘 뒤 API·migrator·worker와 Web의
+amd64/arm64 이미지 발행이 모두 성공했다.
+
+### 적용 순서와 보존 범위
+
+1. 서비스별 Compose labels에서 기존 파일 순서와 환경파일을 복원했다.
+   DB의 custom-format dump와 변경 전 컨테이너·설정, 이전 이미지 태그를
+   Git 제외 경로 `data/backups/silence-opt-in-20261004/`와 Docker에 보존했다.
+   dump는 `pg_restore --list`로 읽기 검증했다.
+2. LiveKit room 0개를 확인한 뒤 production migrator의 대기 목록을 조회했다.
+   대기는 `Migration20261004010000_ConversationSilenceTimeoutOptIn` 한 개였다.
+   기존 preflight를 포함한 `migration:up:prod`로 적용했으며,
+   `conversation_settings.silence_timeout_enabled`는 `boolean NOT NULL DEFAULT false`다.
+3. 기존 체인 마지막에 비공개 `config/silence-opt-in-20261004.local.yaml`을 추가했다.
+   API → worker → Web 순서로 각각 `up -d --no-deps --no-build --pull never --wait`를 실행했다.
+   worker에는 종료 대기 600초를 허용했고, 새 worker만 실행 중인 것을 확인한 뒤 Web을 교체했다.
+4. worker의 기존 base 파일만 primary `compose.yml`로 전환했다. 전환 전후 worker의
+   해석된 서비스 설정과 사용 네트워크 정의가 동일했다. API·Web의 환경파일 2개,
+   worker의 기존 `.env`, 각 서비스의 나머지 overlay 순서는 유지했다.
+   실행 labels와 배포 경로에는 `.worktrees/`가 없다.
+
+네 대상(API·migrator·worker·Web)의 해석된 서비스 설정은 image·pull policy 외에 동일했다.
+비대상 컨테이너 12개의 ID와 기존 볼륨 48개가 보존됐다. 기존 대화 설정 3건의 값과
+수정 시각은 새 boolean 필드를 제외한 전체 행 fingerprint로 전후 동일함을 확인했다.
+schema rollback, 사용자 설정 저장, 불필요한 전체 stack 재생성이나 Docker 정리는 수행하지 않았다.
+
+### 검증 결과
+
+- API·worker·Web은 의도한 revision과 image digest로 실행되며 healthy, restart 0이다.
+  HTTPS `/api/v1/health`와 worker readiness는 200이고 LiveKit `registered worker` 로그를 확인했다.
+- 실제 배포 worker 이미지에서 외부 네트워크 없이 실제 SDK·실제 타이머를 실행했다.
+  무응답 5초를 넘긴 OFF 세션은 유지되고 ON 세션은 종료됐다.
+  OFF 세션도 최대 통화 시간 10초에는 종료됐다.
+- 기존 검증 계정에 production session service로 10분 수명의 임시 세션을 발급했다.
+  실제 HTTPS 설정 화면의 desktop·390px mobile에서 자동 종료 OFF,
+  기존 30초 값 보존과 입력 비활성화, 가로 overflow 없음을 확인했다.
+  실제 GET `/api/v1/conversation-settings`는 200과 `silenceTimeoutEnabled: false`를 반환했다.
+  설정은 저장하지 않았으며 임시 세션 폐기 후 동일 요청이 401임을 확인했다.
+- 새 외부 SIP/브라우저 통화와 실제 음성 provider까지 연결한 end-to-end 통화는
+  이 배포에서 실행하지 않았다. 오프라인 SDK 검증과 LiveKit 등록을 실제 통화 증거로 간주하지 않는다.
+
+### 복구
+
+이전 이미지는 `port-api:rollback-before-silence-opt-in-20261004`,
+`port-voice-agent:rollback-before-silence-opt-in-20261004`,
+`port-web:rollback-before-silence-opt-in-20261004`로 보존했다.
+복구 시 보호된 변경 전 기록과 현재 labels를 비교하고, 서비스별 원래 체인의 마지막
+silence override만 제외해 세 서비스를 함께 복원한다. 이후 다른 배포가 있으면 이 기록으로
+덮어쓰지 않는다. worker는 설정이 동일한 primary base 경로를 유지한다.
+새 DB 컬럼은 forward-only이므로 삭제하지 않는다.
+구 worker는 OFF 플래그를 모르므로 새 UI만 남기는 부분 rollback은 허용하지 않는다.
+구 릴리스로 복구하면 기존의 무응답 자동 종료 동작도 돌아온다.
+
 ## Personal Space 런타임과 배포
 
 [Personal Space 런타임과 배포 경계](docs/personal-space-runtime.md)는 Save·UI Deploy와

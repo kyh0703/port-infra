@@ -1,0 +1,19 @@
+# Silence automatic hangup opt-in; contracts 7.20.0.
+# API/migrator 4739b239, worker 5a1f2a1, Web 3f58674f; Spec bda3e69.
+# Copy to the ignored .local.yaml after pulling all four immutable images.
+# Append to each service's existing ordered Compose/env-file chain.
+# Apply the migration, then API and worker (drain old workers), then Web.
+# No environment, command, mount, port or network overrides.
+services:
+  api:
+    image: ghcr.io/kyh0703/port-api@sha256:0bb3ef332b93e7c530f5b28ce120eb143fb512cd1d07e3c2de116aae6d01b620
+    pull_policy: never
+  api-migrator:
+    image: ghcr.io/kyh0703/port-api@sha256:b712c291beea25b916c80c39df53ff8d7e9310e06c75b0aa832aa95443c3c19d
+    pull_policy: never
+  voice-agent:
+    image: ghcr.io/kyh0703/port-voice-agent@sha256:db77626d60aea7ba0babe6c28c822125612e7afca073913847fd2695ea869773
+    pull_policy: never
+  web:
+    image: ghcr.io/kyh0703/port-web@sha256:5944d03f8f8c28768af1662dde86d0183cd2323238dd8a08c0ef650bd2c5c9e7
+    pull_policy: never
