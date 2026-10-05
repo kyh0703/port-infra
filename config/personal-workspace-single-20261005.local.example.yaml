@@ -1,0 +1,14 @@
+# Primary personal canvas and silence opt-out recovery.
+# API/migrator 7e11b30a; Web 9888637a; Spec 1bd69ef5.
+# Append the ignored .local.yaml to each service's existing ordered Compose/env chain.
+# Apply the primary migration, then API and Web; preserve current RAG and worker.
+services:
+  api:
+    image: ghcr.io/kyh0703/port-api@sha256:d67321f322fd36e78cc260da453d1fc3899ff4b493d1b827a6cbca4b0113cba6
+    pull_policy: never
+  api-migrator:
+    image: ghcr.io/kyh0703/port-api@sha256:ae900f6499c40071a6bead4971f996a3b20720581d97f0dc0940134505474b55
+    pull_policy: never
+  web:
+    image: ghcr.io/kyh0703/port-web@sha256:e84fdf57866ca3e006161fdac13a55c710f48911d326737350d0f0feda0a4929
+    pull_policy: never
