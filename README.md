@@ -66,6 +66,74 @@ immutable trigger는 다시 활성화됐고 이전 `end_call` root는 0개다.
   DB 복원은 새 데이터 유실 위험이 있으므로 별도 승인과 중단 구간에서만 matching release와
   함께 수행한다. 이후의 배포 설정을 과거 overlay로 덮어쓰지 않는다.
 
+## 대표 개인 공간·OFF 저장 복구 배포 — 2026-10-05
+
+로컬 Mac/Colima Compose project `infra`의 API·Web에 적용했다. 원격 GitOps나
+실제 음성 통화 검증 기록이 아니다. 이미지 불변 digest는
+[릴리스 예제](config/personal-workspace-single-20261005.local.example.yaml)에 기록했다.
+
+| 대상 | 실행 소스 |
+| --- | --- |
+| API·migrator | `7e11b30a01e0798faac8135f12ba8ee8f33a5802` |
+| Web | `9888637a92e760d63f993f60dee3c16ea3fdd719` |
+| Spec migration pin | `1bd69ef51cd876851a8b3193a959822d20a5f5c2` |
+| RAG, 유지 | `5d7d4c87`, Alembic `20261005_0008` |
+| voice-agent, 유지 | `5a1f2a182afbdb987bc2df478c3c25370db82ca3` |
+
+### 적용·보존
+
+- API Actions `37255930115`, Web Actions `37256161329`가 amd64/arm64 발행에
+  성공했다. 실행한 arm64 이미지의 revision·image ID를 배포 후 대조했다.
+- 보호된 백업은 Git 제외 경로
+  `data/backups/personal-workspace-single-20261005T022653Z/`에 있다.
+  최초 custom dump를 별도 pgvector PostgreSQL에 실제 복원하고 pinned migrator의
+  `migration:up:prod`와 기존 preflight를 검증했다. 일반 PostgreSQL에는 vector
+  extension이 없어 matching image로 복원했다.
+- 중간에 다른 작업의 웹페이지 동기화 배포가 완료된 것을 감지했다. 이전 스냅샷을
+  덮어쓰지 않고 새 컨테이너·Compose/env 체인과 DB dump를 `pre-rollout/`에 다시
+  보존했다. 복원본에는 그 배포 전 RAG `0007`이 들어 있었으며, canonical `0008`
+  적용 후 실제 큐 쿼리와 인증된 문서 조회가 성공했다. RAG native 검증 이미지는
+  별도로 검증했지만, 이미 호환 버전이 운영 중이므로 교체하지 않았다.
+- LiveKit room·participant 0을 확인했다. live pending은
+  `Migration20261005000000_PrimaryPersonalSpace` 하나였고 정상 적용됐다.
+  원본 공간 1건의 전체 행 fingerprint(새 flag 제외)는 그대로이며 자동 선택은 0건이다.
+- 각 서비스의 기존 ordered chain 마지막에 root의
+  `config/personal-workspace-single-20261005.local.yaml`만 추가했다.
+  image·pull_policy 외의 해석된 서비스 설정은 동일했다.
+  API → Web 순서로 `up -d --no-deps --no-build --pull never --wait`를 실행했다.
+  RAG·worker를 포함한 비대상 runtime 컨테이너 15개는 ID가 유지됐다.
+
+### 관찰
+
+- API·Web healthy, restart 0. 실제 HTTPS health·대표 공간·대화 설정·문서 GET은 200.
+- 인증 브라우저에서 빈 계정의 시작, 기존 단일 공간의 명시적 확인과 390px/1440px
+  캔버스 도구모음을 확인했다. 페이지 가로 overflow는 없으며 모바일 도구모음은
+  한 줄 내부 스크롤을 유지한다. 대표를 대신 선택하거나 원본을 저장하지 않았다.
+- 배포된 설정 화면의 브라우저 전용 API fixture로 잘못된 `4` → OFF/75,
+  정상 편집 → OFF/90, 빈 값 → 마지막 저장 90 복구를 확인했다.
+  운영 설정 PUT은 하지 않았다. 기존 대화 설정 3건의 전체 행 fingerprint가 동일했다.
+- 임시 BFF 세션 2개는 폐기 후 HTTP 401을 확인했고 브라우저를 닫았다.
+  API/Web 테스트·빌드 수치는 각 저장소 STATE에 기록한다.
+
+### 복구
+
+직전 이미지와 전체 설정은 `pre-rollout/`에 보존했다.
+`port-api:rollback-before-primary-current-20261005t022653z`와
+`port-web:rollback-before-primary-current-20261005t022653z`는 각각 웹페이지 동기화
+API `b9b378f8`, Web `38863e4b`다. 복구가 필요하면 최신 labels와 비교한 뒤 이번
+primary override만 제외하고 두 서비스를 함께 복원한다. RAG·worker는 건드리지 않는다.
+DB migration과 RAG erasure 함수를 내리거나 운영 DB를 자동 복원하지 않는다.
+대표 선택이 생긴 뒤 구 API로 복구하면 고정·삭제 방지 계약이 사라지므로, 쓰기를
+차단하고 영향부터 검토한다. 가능한 경우 전진 수정으로 복구한다.
+이 기록은 이후 main의 별도 목록 필터 작업까지 배포했다는 뜻이 아니다.
+
+후속 동시 작업이 Web을 `1646d014`로 다시 배포했다. 최종 관찰에서 API `7e11b30a`와
+해당 Web은 healthy/restart 0, HTTPS health 200이었다. 후속 Web은 대표 공간·OFF 수정
+커밋을 모두 포함하며 두 기능의 소스 경로는 위 `9888637a`와 동일했다.
+따라서 위 rollback 태그는 **이 릴리스 당시의 복구 자료**이지 최신 Web의 복구 지시가
+아니다. 후속 override가 있는 상태에서 primary override만 제거하면 API·Web 버전이
+엇갈릴 수 있다. 실제 복구는 최신 전체 체인과 후속 릴리스 기록을 기준으로 결정한다.
+
 ## 무응답 자동 종료 opt-in 배포 — 2026-10-04
 
 로컬 Mac/Colima의 Compose project `infra`에 적용했다. 미디어는 기존 LiveKit Cloud를
