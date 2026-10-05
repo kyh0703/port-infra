@@ -64,6 +64,13 @@ DB migration과 RAG erasure 함수를 내리거나 운영 DB를 자동 복원하
 차단하고 영향부터 검토한다. 가능한 경우 전진 수정으로 복구한다.
 이 기록은 이후 main의 별도 목록 필터 작업까지 배포했다는 뜻이 아니다.
 
+후속 동시 작업이 Web을 `1646d014`로 다시 배포했다. 최종 관찰에서 API `7e11b30a`와
+해당 Web은 healthy/restart 0, HTTPS health 200이었다. 후속 Web은 대표 공간·OFF 수정
+커밋을 모두 포함하며 두 기능의 소스 경로는 위 `9888637a`와 동일했다.
+따라서 위 rollback 태그는 **이 릴리스 당시의 복구 자료**이지 최신 Web의 복구 지시가
+아니다. 후속 override가 있는 상태에서 primary override만 제거하면 API·Web 버전이
+엇갈릴 수 있다. 실제 복구는 최신 전체 체인과 후속 릴리스 기록을 기준으로 결정한다.
+
 ## 무응답 자동 종료 opt-in 배포 — 2026-10-04
 
 로컬 Mac/Colima의 Compose project `infra`에 적용했다. 미디어는 기존 LiveKit Cloud를
