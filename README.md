@@ -3,6 +3,69 @@
 로컬 개발에 필요한 상태 저장 서비스와 애플리케이션을 Docker Compose로 실행한다.
 애플리케이션은 각 저장소가 GHCR에 발행한 `:dev` 이미지를 사용한다.
 
+## 대화 종료 도구 전환 배포 — 2026-10-05
+
+로컬 Mac/Colima의 Compose project `infra`에 `end_call` → `end_conversation`
+전환을 적용했다. 미디어는 기존 LiveKit Cloud를 유지한다. 원격 Kubernetes 배포는 아니다.
+
+| 대상 | 실행 중 소스 revision |
+| --- | --- |
+| API·migrator | `e95114522844b391b44dd0ccb5570717abeda069` |
+| voice-agent | `7a74d7f1cc09f117ba438f8697fc809a4c46ecd6` |
+| 최종 Web | `6deb4c6c5b2b2f74ac914e9b620de50510360281` |
+| Spec migration pin | `7ff1dd36eb1b03174a3863098bada9bf05119f91` |
+
+API·migrator·worker와 최초 Web `40cd1706`은 GitHub Actions에서 발행한 immutable
+GHCR 이미지를 사용했다. 이후 동시 작업의 도구 이름 통합과 종료 도구 변경을 모두 포함한
+Web `6deb4c6c`로 Web만 교체했다. 최종 image pin은
+[릴리스 override 예제](config/end-conversation-20261005.local.example.yaml)에 기록한다.
+최종 Web 이미지는 해당 Mac에 있는 로컬 image ID다. 다른 호스트에서 실행하려면
+같은 revision의 이미지 발행 또는 검증된 archive 이전이 먼저 필요하다.
+
+### 적용 순서와 보존 범위
+
+1. 서비스별 실행 labels의 Compose·env 체인을 보존했다. 기존 환경변수와 최종
+   해석된 설정을 비교해 image·pull policy 외 변경이 없음을 확인했다.
+2. `data/backups/end-conversation-20261005/`에 접근 제한된 컨테이너·설정 기록,
+   rollback image 태그와 PostgreSQL custom-format dump를 보존했다.
+   dump를 독립 DB로 복원해 실제 migrator와 암호화 Space 전환을 먼저 실행했다.
+3. 진행 중 conversation과 LiveKit room이 모두 0임을 확인했다. ingress를 중지하고
+   worker를 drain한 뒤 API·Web 쓰기를 중지했다. 최종 `pre-cutover.dump`를
+   다시 생성하고 `pg_restore --list`로 읽기 검증했다. 제거할 session cache는 0개였다.
+4. production `migration:up:prod`의 기존 preflight와
+   `Migration20261005010000_RenameEndConversationTools`를 실행했다.
+   root 5건·historical publication 5건을 전환했다. 암호화 Space operator는
+   1건을 검사했고 변경할 생성 참조가 없어 0건을 수정했다.
+5. API → worker → Web을 `up -d --no-deps --no-build --pull never --wait`로 교체하고
+   같은 ingress 컨테이너를 재개했다. 최종 Web 이름 통합 배포는 이후 Web만 교체했다.
+   기존 파일 체인 마지막의 `config/end-conversation-20261005.local.yaml`과
+   Web의 `config/unified-tool-name-final-20261005.local.yaml` 우선순위를 유지한다.
+
+암호화 Space operator는 runner 이미지의 `node scripts/rename-space-end-conversation.mjs`
+명령이며 기본 dry-run, 적용은 `--apply`다. 살아 있는 API 서비스의 one-off run은
+고정 IP 충돌이 발생하므로 `config/end-conversation-operator.local.yaml`로 runner 이미지를
+지정한 `api-migrator` 서비스의 네트워크·기존 OpenBao mounts/env를 사용했다.
+
+앱 3종 외 13개 컨테이너 ID와 기존 볼륨 50개를 보존했다. root 설정·publication ID/config·
+execution ID·conversation settings·Space layout의 변경 전후 fingerprint가 같았다.
+immutable trigger는 다시 활성화됐고 이전 `end_call` root는 0개다.
+사용자 도구 저장·발행, schema rollback, 볼륨 삭제는 수행하지 않았다.
+
+### 검증과 복구
+
+- API·worker·최종 Web은 healthy, restart 0이다. HTTPS health와 worker readiness는 200,
+  LiveKit worker 등록을 확인했다.
+- 실제 운영 publication 5건의 validator·snapshot hash와 기존 `endCall` protobuf 설정을
+  확인했다. 배포 worker의 실제 runtime callable을 오프라인 실행한 text/voice 8개 조합이 통과했다.
+- 기존 검증 계정의 10분짜리 production session으로 실제 HTTPS catalog 200과
+  `end_conversation`을 확인했다. 최종 Web의 readonly 도구 이름, `대화 종료` 유형,
+  기존 호출 조건·종료 문구를 브라우저에서 확인했다. 저장하지 않았으며 세션 폐기 후 401을 확인했다.
+- 외부 SIP·브라우저 음성 provider를 포함한 전체 통화는 실행하지 않았다.
+- 변경 전 이미지는 `port-{api,voice-agent,web}:rollback-before-end-conversation-20261005`로
+  보존했다. SQL 전환은 forward-only다. 구 API/runtime 이미지 단독 복구는 금지한다.
+  DB 복원은 새 데이터 유실 위험이 있으므로 별도 승인과 중단 구간에서만 matching release와
+  함께 수행한다. 이후의 배포 설정을 과거 overlay로 덮어쓰지 않는다.
+
 ## 무응답 자동 종료 opt-in 배포 — 2026-10-04
 
 로컬 Mac/Colima의 Compose project `infra`에 적용했다. 미디어는 기존 LiveKit Cloud를

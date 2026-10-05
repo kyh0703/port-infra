@@ -1,0 +1,16 @@
+# Append to each service's existing live Compose/env chain; never replace the chain.
+# API/migrator: e9511452, worker: 7a74d7f, Web: 6deb4c6c (main docs: 251c03f8).
+# Final Web is a local image ID. Publish or transfer that exact image before use on another host.
+services:
+  api:
+    image: ghcr.io/kyh0703/port-api@sha256:0f8acb7f82eafcf3d5a59cfb9a8a0a0069e0ee7f4fb64fe0a5bf57bb5303056e
+    pull_policy: never
+  api-migrator:
+    image: ghcr.io/kyh0703/port-api@sha256:9e75ddbda7b51a3eb1714ff19e3aeb7eeff398990f0c671f4205192a49588f74
+    pull_policy: never
+  voice-agent:
+    image: ghcr.io/kyh0703/port-voice-agent@sha256:67bbb71f200e58b674745806afadbd839a740c058c23338049f4c00560b28dbb
+    pull_policy: never
+  web:
+    image: sha256:f51054e0cc19e1cd703185bf46e8847b61976045e63ce8b49379c0e2c255caa9
+    pull_policy: never
