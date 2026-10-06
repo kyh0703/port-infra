@@ -899,10 +899,19 @@ Worker의 Compose healthcheck와 Make 명령은 컨테이너 내부 SDK endpoint
 Native auth, Web→API, API→RAG 연동도 별도 manual smoke로 확인한다. Aggregator는 distroless
 이미지라 컨테이너 healthcheck 대신 host smoke (`3001/healthz`)를 사용한다.
 
-로컬 Compose의 API는 `NODE_ENV=local`을 사용한다. SMTP가 설정되지 않은 로컬에서
+로컬 Compose의 API는 `NODE_ENV=local`을 사용한다. Resend가 설정되지 않은 로컬에서
 회원가입 이메일 인증 코드를 응답으로 반환하고 Web이 자동 입력할 수 있도록 하는 개발 전용 설정이다.
-실제 환경에서는 SMTP를 설정하고 `NODE_ENV=production`으로 실행해야 하며, 인증 코드를
-응답이나 로그로 노출하면 안 된다. `MAIL_HOST`, `MAIL_USER`, `MAIL_PASS`는 이 로컬 설정에 넣지 않는다.
+실제 환경에서는 API 서버의 env 파일에 `RESEND_API_KEY`와 Resend에서 검증된
+발신 도메인의 `MAIL_FROM`을 함께 설정하고 `NODE_ENV=production`으로 실행한다.
+인증 코드·메일 본문·수신자·API 키를 로그에 남기거나 브라우저에 키를 전달하지 않는다.
+기존 `MAIL_HOST`·`MAIL_PORT`·`MAIL_USER`·`MAIL_PASS` SMTP 설정은 사용하지 않는다.
+
+이메일 템플릿은 `/admin/email-templates`에서 관리한다. API의 고정 bundle에
+`Migration20261006010000_EmailTemplates`가 포함되어 있어야 하며 승인한 DB migration
+절차를 먼저 수행한다. API·Web을 같은 기능 버전으로 반영한 후 관리자 자신의 이메일로
+`[TEST]` 발송을 확인한다. Resend ID는 접수 확인이며 수신함 배달을 보장하지 않는다.
+이 작업의 격리 DB·브라우저 검증과 운영 적용은 별개다. 이메일 기능 때문에 자동으로
+컨테이너를 재생성하거나 운영 DB를 변경하지 않는다.
 
 Manual smoke checklist: native auth → Web→API→RAG→Voice→LiveKit Cloud 순서로
 로그인, API 호출, RAG 요청, Voice bootstrap, Cloud room의 데이터·오디오 송수신을 확인한다.
