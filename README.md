@@ -3,6 +3,74 @@
 로컬 개발에 필요한 상태 저장 서비스와 애플리케이션을 Docker Compose로 실행한다.
 애플리케이션은 각 저장소가 GHCR에 발행한 `:dev` 이미지를 사용한다.
 
+## 음성 통합 리뷰 수정 배포 — 2026-10-06
+
+로컬 Mac/Colima Compose project `infra`에 적용했다. 선행 shadcn Web 배포의 main
+push·배포·검증 완료 handoff를 받은 뒤 API → voice-agent만 직렬 교체했다.
+미디어는 기존 LiveKit Cloud다. 원격 Kubernetes 배포나 실제 provider 통화 기록이 아니다.
+
+| 대상 | 배포 소스 revision |
+| --- | --- |
+| API·migrator image pin | `01a8ebb17509cd8359c6e37c3b0ff7edfa737afe` |
+| voice-agent | `288d50e9bf682d91dc5d2bbc608b186548098cc5` |
+| 보존한 선행 Web | `05d8173437d565809d4f49d83bf581ab41bf1d33` |
+| API migration Spec pin | `abdf57e6dfaf7d7469b4ebb8fdadd99d95524f87` |
+
+세 앱은 GitHub Actions에서 발행한 arm64 immutable GHCR digest로 실행한다.
+[음성 리뷰 image-only override 예제](config/voice-integration-review-20261006.local.example.yaml)는
+API·migrator·worker만 고정한다. Web source `05d81734`는 리뷰 수정과 선행 shadcn 변경을
+모두 포함한다. Web main `ffddc232`는 이후 배포 기록을 추가한 커밋이며, 이전 리뷰 Web
+`d1e41486`로 현재 Web을 덮어쓰지 않는다.
+
+### 적용·보존
+
+1. API의 기존 Compose 30개·env 2개와 worker의 Compose 17개·env 1개를 복원했다.
+   image·pull policy를 제외한 전체 렌더링 설정과 실제 컨테이너의 선언된 env를 대조했다.
+   마지막에 primary infra의 `config/voice-integration-review-20261006.local.yaml`만 추가했다.
+   최종 파일 체인은 API 31개, worker 18개다. Web은 기존 39개 체인과 컨테이너를 유지했다.
+2. `data/backups/voice-integration-review-20261006T082452Z/`에 변경 전후 private runtime,
+   Compose 설정, 검증 기록과 `pre-rollout.dump`를 보존했다. 디렉터리는 0700, 파일은 0600이다.
+   PostgreSQL custom archive는 6,206,626 bytes이며 `pg_restore --list`로 읽기를 검증했다.
+   SHA-256은 `171168656f45a573a809b948916ad0d387e28550f98db01358990d919c074345`다.
+   이 새 dump의 전체 복원은 실행하지 않았다.
+3. 진행 중 conversation·삭제 lease와 LiveKit room·participant가 모두 0임을 확인했다.
+   published migrator의 read-only `migration:pending`은 pending 0이었다.
+   이미 적용된 `user_voices.deletion_token`·`deletion_expires_at`과 두 validated CHECK를 유지했다.
+   이번 이미지 교체에서 migration UP/DOWN, DB 복원, provider 설정 변경은 실행하지 않았다.
+4. 서비스별 최신 전체 체인에 override를 붙여 API → worker를
+   `up -d --no-deps --no-build --pull never --wait --wait-timeout 180`으로 교체했다.
+   API 종료 여유는 60초, worker는 120초였다. Web·ingress·DB를 재생성하지 않았다.
+5. 두 대상 외 14개 컨테이너 ID·image·시작 시각을 유지했다. 대상의 env·command·mount·
+   port·restart policy·host aliases도 동일하다. 기존 볼륨과 private env/context/WIP는 보존했다.
+   전체 stack `make deploy`/`recreate`, orphan 삭제, volume 정리는 실행하지 않았다.
+
+### 실제 검증
+
+- API·worker·Web의 OCI revision·digest를 대조했다. 모두 healthy, restart 0이다.
+  trusted HTTPS API health와 worker readiness는 200이며 LiveKit worker 등록을 확인했다.
+- 실제 API 이미지로 발급한 10분짜리 canonical verification session으로 HTTPS auth/me·
+  개인 음성 목록 GET 200과 존재하지 않는 UUID의 DELETE 404를 확인했다.
+  현재 개인 음성은 0개다. 업로드·실제 provider 음성 삭제는 실행하지 않았다.
+- 실제 HTTPS Web에서 required 음성 복제 동의의 기본 미선택, 동의 없는 제출의
+  validation, 체크/해제 전환을 확인하고 화면을 캡처했다. WAV는 로컬 선택만 했다.
+  STT 용어의 Enter·빈 줄·끝 공백과 다른 필드 수정 후 raw draft 보존도 화면에서 확인했다.
+  프로필 저장·미리듣기를 실행하지 않았고 브라우저의 쓰기 요청은 차단했다.
+- 배포된 worker 내부에서 실제 Cartesia SDK와 loopback WebSocket을 사용한
+  `node --test dist/runtime/cartesia-stream.test.js` 5개가 통과했다. in-band 404+done의
+  terminal error, 5xx retry와 소비된 텍스트 보호, 빈 function-call 턴, flush PCM을 확인했다.
+- 검증 세션은 만료 전에 폐기해 auth/me 200 → 401을 확인했다. 전용 브라우저와 임시
+  session/WAV 파일을 정리했다. 실제 Cartesia 생성·SIP·브라우저 음성 전체 통화는 실행하지 않았다.
+
+### 복구 경계
+
+직전 이미지는 `port-api:rollback-before-voice-review-20261006t082452z`와
+`port-voice-agent:rollback-before-voice-review-20261006t082452z`로 보존했다.
+복구는 보호된 변경 전 기록과 최신 서비스 labels를 비교한 뒤 필요한 image만 결정한다.
+선행 Web/shadcn override와 후속 릴리스 체인을 과거 파일로 덮어쓰지 않는다.
+구 API는 deletion lease를 모르므로 살아 있는 삭제 작업을 먼저 drain하거나 lease 만료를
+확인해야 한다. 추가된 lease schema와 데이터는 유지하며 SQL DOWN/운영 DB 자동 복원은 금지한다.
+백업 복원은 이후 데이터 유실 위험이 있으므로 별도 승인·중단 구간 없이 수행하지 않는다.
+
 ## 대화 종료 도구 전환 배포 — 2026-10-05
 
 로컬 Mac/Colima의 Compose project `infra`에 `end_call` → `end_conversation`

@@ -1,0 +1,16 @@
+# Append to each service's latest live Compose/env chain after the preceding Web rollout.
+# API/migrator: 01a8ebb1; voice-agent: 288d50e. Lease schema is already applied.
+# Preserve Web revision 05d81734 and its preceding shadcn rollout chain; do not pin an older Web.
+#
+# Append this file last to each target's own complete live chain and recreate api, then voice-agent.
+# The migrator digest is pinned for read-only pending checks; do not reapply the lease migration.
+services:
+  api:
+    image: ghcr.io/kyh0703/port-api@sha256:964f291cdd6997ad5e88bc78439e46f082d170901d092c5891b93d3263fc0c35
+    pull_policy: never
+  api-migrator:
+    image: ghcr.io/kyh0703/port-api@sha256:e880ad5ab6154bf883e272915a5dce78e3e5a94c26f7fccd2469a2161599d9fa
+    pull_policy: never
+  voice-agent:
+    image: ghcr.io/kyh0703/port-voice-agent@sha256:78e45e50ba40500ccd443e4535917a76e8cfcff62dbffaa87937044129cd9066
+    pull_policy: never
