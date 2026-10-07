@@ -3,6 +3,67 @@
 로컬 개발에 필요한 상태 저장 서비스와 애플리케이션을 Docker Compose로 실행한다.
 애플리케이션은 각 저장소가 GHCR에 발행한 `:dev` 이미지를 사용한다.
 
+## 의존성 보안 운영 배포 — 2026-10-07
+
+로컬 Mac/Colima Compose project `infra`의 현재 운영 버전에 보안 수정만 backport했다.
+기존 LiveKit Cloud를 유지했다. 최신 main의 HA 전환이나 원격 Kubernetes 배포는 아니다.
+
+| 대상 | 운영 소스 revision | immutable GHCR digest |
+| --- | --- | --- |
+| API | `cb7715e202bcedc213b2211f8f062efa414c3ba8` | `sha256:b6d7181e0bfabbb017402371f62d5972c3e102fca6b8b1efc850e5314c38f41c` |
+| 실행하지 않은 기존 묶음 migrator | 위 API와 동일 | `sha256:8a2f8ee3d1f7fa62a9f8318cfe3cf6d0c9cc4a23153288c5a8d2e41bc952f8a8` |
+| voice-agent | `4927f0470c7d8b6d8e32ca8d794573359ac89b7c` | `sha256:d2ff3ce5c7d6b232a19202513609260ae7a906c2be29b36350a161ae1796614e` |
+
+### 취약점·호환성
+
+- main Worker 감사 15건과 API 감사 60건을 해소했다. 운영 backport 두 저장소도
+  개발 의존성을 포함해 audit 0이다. advisory 제외나 `--force`로 경고를 숨기지 않았다.
+- API main `95752e423053935342c5f3722a4747d32ad73945`, Worker main
+  `fbd2387b2e62598535ac17ce8c83257aa2624a79`를 push했다. 운영 이미지는 위 backport
+  revision으로 만들었으며 기존 contracts 7.20.0과 API의 166-file migration 묶음을 유지한다.
+- Nest를 11.2.7로 정렬했고 Nodemailer 10.0.15를 사용한다. Multer 2.4.0의 inclusive
+  제한에 맞춰 documents·support knowledge·user voices의 정확한 상한과 다음 바이트 거부를 유지한다.
+- 공식 수정 릴리스가 없는 braces는 provenance 확인된 guarded fork를 사용한다.
+  새 maintainer·prerelease 공급망 위험은 남는다. `sprintf-js`는 원본 BSD 라이선스를 유지한
+  로컬 fork에서 숫자 precision을 제한한다. 실제 MikroORM→Umzug→argparse 소비 경로로 확인했다.
+- 운영 Worker 회귀 1,124개가 skip 없이 통과했다. 운영 API는 기존 490파일을 실행하고
+  수정한 네 파일의 94개 회귀와 44개 script test를 통과했다. Typecheck·build·lint도 통과했다.
+
+### 적용·실제 검증
+
+- primary infra의 private `config/dependency-security-20261007.local.yaml`을 마지막에
+  추가했다. API는 Compose 32개·env 2개, Worker는 Compose 19개·env 1개 체인이다.
+  두 체인의 렌더링 차이는 API·migrator·Worker의 image 세 값뿐이다.
+- 실제 Cloud room·participant와 진행 중 conversation이 0임을 확인한 뒤
+  API → Worker만 `up -d --no-deps --no-build --pull never --wait --wait-timeout 180`으로 교체했다.
+  종료 여유는 각각 60초·120초였다. 기존 pending/active interaction 기록 47개는 수정하지 않았다.
+- 두 서비스 모두 healthy·restart 0이다. 실제 app env·command·mount·port·restart policy·
+  network aliases는 동일하다. 두 대상 외 9개 컨테이너의 ID·image·시작 시각도 보존했다.
+  Web·Aggregator·ingress·DB·Redis·OpenBao를 재생성하지 않았다.
+- trusted HTTPS API health 200·인증 없는 auth/me 401, Worker 내부 readiness 200과
+  실제 LiveKit Cloud SDK worker 등록을 확인했다. 실행 중 arm64 Worker에서 RTC native
+  AudioFrame과 Sharp 0.35.5의 2×3 SVG→PNG를 실행했다. API 이미지의 Nest 로딩과
+  Nodemailer MIME 생성도 확인했으며 실제 메일·유료 provider/SIP 전체 통화는 실행하지 않았다.
+- API·infra의 기존 WIP 상태를 확인했다. Web의 후속 `refactor/single-space-editor-cleanup`
+  브랜치 작업은 건드리지 않았다. 후속 Web·infra main에도 앞서 병합한 HA 소스가 남아 있다.
+
+### DB 백업·승인된 migration 보류
+
+- 보호된 기록은 `data/backups/dependency-security-20261007T015340Z/`에 보존했다.
+  디렉터리는 0700, 파일은 0600이다. `pre-migration.dump`는 6,233,002 bytes,
+  SHA-256 `970fb098bfdb0a488cb429c0d8483f07306694134d471eeb3bcba2a8b92fc6c6`다.
+  같은 PostgreSQL 17.11의 network-none·tmpfs 격리 DB로 전체 복원했고 이후 복원 컨테이너를 제거했다.
+- 배포 직전 다시 만든 `pre-rollout.dump`는 6,233,256 bytes,
+  SHA-256 `efcbbc6e675d71be380a564ab8cb3ae1a2c813f1ba1a5d57aba11b6f87bb400e`다.
+  이 두 번째 dump의 전체 복원을 별도로 반복하지 않았다.
+- 복원본에 최신 main의 8개 UP을 적용하자 `llm_audit_executions.capability_hash`가 삭제됐다.
+  현재 운영 `LlmAuditRepository`는 해당 컬럼에 INSERT·SELECT하므로 backward-compatible하지 않다.
+  사용자 승인으로 **8개 모두 보류**했다. 새 감사·인증 모델과 HA 전환을 함께 준비할 때 적용한다.
+- 운영은 적용 이력 **167건**, 사용자 5명·conversation 31건을 유지했고 해당 컬럼도 존재한다.
+  기존 166-file 운영 묶음의 read-only pending은 0이다. 최신 main의 8개가 pending 0이라는 뜻은 아니다.
+  과거 `Migration20260827120000_ToolKeyNamespace` 이력을 제거하거나 다시 쓰지 않았다.
+  운영 migration UP/DOWN·자동 DB 복원은 실행하지 않았다. 복구는 필요한 이미지 교체만 한다.
+
 ## 음성 통합 리뷰 수정 배포 — 2026-10-06
 
 로컬 Mac/Colima Compose project `infra`에 적용했다. 선행 shadcn Web 배포의 main
