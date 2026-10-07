@@ -1128,7 +1128,7 @@ make db-ensure-user
 ## Runtime HA — 격리 fleet와 운영 cutover
 
 contracts `8.0.0` / `runtime-recovery-v1`을 같은 릴리스로 배포한다.
-API의 pinned canonical migration은 169개다. 기존 production image·override·DB는
+API의 pinned canonical migration은 174개다. 기존 production image·override·DB는
 이 검증 경로에서 변경하지 않는다. 일반 서비스 `down -v`나 `.env*` 자동 복사는 금지한다.
 
 ### 양성 소유권이 있는 로컬 fixture
@@ -1188,7 +1188,7 @@ fault 후 같은 소유 fixture를 restore하며, `--remove-owned-volumes`는 �
   active provider signal·실제 SIP/PSTN, production Bao/key availability,
   PostgreSQL failover/RPO 0·Redis state loss는 별도 외부 acceptance gate다.
   OSS local 또는 historical SQL tuple은 이 gate의 native evidence가 아니다.
-- CLI 회귀 146개, private data bootstrap, pinned 일반 migrator 169개 up·pending 0을
+- 이전 검증에서 CLI 회귀 146개, private data bootstrap, pinned 일반 migrator 169개 up·pending 0을
   확인했다. 최종 `fleet-c51-final169-9a14`의 API 2개·A/B 각 2개 replica에서
   실제 smoke 11개 관찰을 통과했다. PostgreSQL·Redis·API outage/restore와
   새 withdrawal ACK·native inventory를 확인했다. Bao 봉인 30초 동안 plaintext
@@ -1196,4 +1196,9 @@ fault 후 같은 소유 fixture를 restore하며, `--remove-owned-volumes`는 �
   EMPTY A-fleet SIGTERM은 1.18초/45초, 원래 두 container의 exit `[0, 0]`이었다.
   evidence는 private state의 `smoke-api5-worker8-final.json`에 보존한다.
   소유 fleet만 down했고 volumes·key state·inventory·evidence는 유지했다.
+- 최신 main 통합 후 174개 일반 migrator up·pending 0과 새
+  `fleet-main174-556d84f-v1`의 API 2개·A/B 각 2개 replica를 확인했다.
+  실제 fault/restore·fresh withdrawal ACK·native inventory·봉인·signal smoke 11개를 통과했다.
+  같은 key 복구는 5.70초/60초, EMPTY A-fleet SIGTERM은 1.35초/45초·exit `[0, 0]`이었다.
+  `smoke-merged174-final.json`을 보존하고 소유 fleet만 down했다. volumes·key state는 유지했다.
 
