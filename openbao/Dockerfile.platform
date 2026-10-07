@@ -1,0 +1,18 @@
+FROM ghcr.io/openbao/openbao:2.6.2
+USER root
+RUN apk add --no-cache python3 && mkdir -p /bao/tls-runtime /bao/audit /bao/data
+COPY openbao/config.hcl /bao/config/openbao.hcl
+COPY openbao/seal-platform.hcl /bao/config/seal-platform.hcl
+COPY openbao/platform-entrypoint.sh /usr/local/bin/platform-entrypoint
+COPY openbao/platform-server.sh /usr/local/bin/platform-server
+COPY scripts/openbao_platform.py /usr/local/bin/openbao-platform
+RUN chmod 755 /usr/local/bin/platform-entrypoint /usr/local/bin/platform-server /usr/local/bin/openbao-platform
+ENV OPENBAO_SEAL_MODE=static \
+    OPENBAO_SEAL_RUNTIME_DIR=/dev/shm/port-bao-seal \
+    PORT=8000 \
+    OPENBAO_SHUTDOWN_MS=30000
+EXPOSE 8000 8200
+# Provider health is cleartext on PORT; key/data probes remain verified TLS on
+# Bao's distinct internal port. No init/unseal/migration command exists here.
+ENTRYPOINT []
+CMD ["python3", "/usr/local/bin/openbao-platform"]

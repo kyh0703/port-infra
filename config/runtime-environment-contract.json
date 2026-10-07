@@ -1,0 +1,75 @@
+{
+  "protocolRevision": "runtime-recovery-v1",
+  "checkpointCodec": "port-runtime-checkpoint-v1",
+  "codeHashRepresentation": "bare lowercase 64hex compatibilityFingerprint/sdkPatchDigest/builtinInventoryDigest plus required baked/health modelCacheSelectionDigest; no prefixed alias",
+  "imageAndArtifactDigestRepresentation": "sha256: followed by lowercase 64hex",
+  "parent": {
+    "required": ["PORT", "SDK_HTTP_PORT", "RUNTIME_POOL_ID", "RUNTIME_BUILD_ID", "RUNTIME_IMAGE_DIGEST", "RUNTIME_COMPATIBILITY_FINGERPRINT", "RUNTIME_LAUNCHER_KEY", "INTERNAL_API_BASE_URL", "VOICE_RUNTIME_GRPC_ADDR", "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "RUNTIME_LIVEKIT_PROVIDER", "RUNTIME_LIVEKIT_PROJECT_ID", "RUNTIME_ENVIRONMENT_ID", "REDIS_URL"],
+    "ports": {"PORT": 8000, "SDK_HTTP_PORT": 8081},
+    "declaredTarget": {"providerEnum": ["livekit-cloud", "livekit-oss"], "projectEnvironmentBindingRequired": true, "ossMediaAdmission": false, "ossStartupLiveness": true},
+    "timeoutsMilliseconds": {"RUNTIME_HEARTBEAT_MS": 5000, "RUNTIME_SHUTDOWN_MS": 30000, "RUNTIME_CHILD_SHUTDOWN_MS": 5000, "RUNTIME_ASSIGNMENT_TIMEOUT_MS": 7500},
+    "startupPath": "/startupz",
+    "readinessPath": "/readyz",
+    "livenessPath": "/livez",
+    "signal": "SIGTERM",
+    "providerDrainingSeconds": 45,
+    "inventoryPath": "/app/runtime-build-inventory.json"
+  },
+  "control": {
+    "required": ["RUNTIME_CONTROL_KEY"],
+    "header": "x-runtime-control-key",
+    "registryPath": "/api/v1/internal/runtime-launchers",
+    "poolAdmissionPath": "/api/v1/internal/runtime-launchers/pools/{poolId}/admission",
+    "desiredFields": ["initialAccepting", "recoveryAccepting", "retiring", "expectedRevision"],
+    "acknowledgement": "every fresh launcher incarnation at desired revision; never a load-balanced URL"
+  },
+  "apiOnly": {
+    "brokerEnvironment": ["WIDESHOT_BASE_URL", "WIDESHOT_API_KEY", "WIDESHOT_SMS_CALLBACK_NUMBER", "WIDESHOT_RESELLER_CODE", "WIDESHOT_TIMEOUT_MS", "API_TOOL_ALLOWED_PRIVATE_ORIGINS"],
+    "privateOriginPolicy": "exact RFC1918/ULA origins explicitly opted in; loopback and metadata always rejected",
+    "evidenceEnvironment": ["RUNTIME_CAPABILITY_EVIDENCE_PATH", "RUNTIME_CAPABILITY_EVIDENCE_ID", "RUNTIME_CAPABILITY_EVIDENCE_SHA256", "RUNTIME_LIVEKIT_PROVIDER", "RUNTIME_LIVEKIT_PROJECT_ID", "RUNTIME_ENVIRONMENT_ID", "RUNTIME_BUILD_ID", "RUNTIME_IMAGE_DIGEST", "RUNTIME_SDK_PATCH_DIGEST", "RUNTIME_BUILTIN_INVENTORY_DIGEST", "RUNTIME_CHECKPOINT_CODEC", "RUNTIME_COMPATIBILITY_FINGERPRINT"],
+    "firstCutoverEvidenceEnvironment": ["RUNTIME_FIRST_CUTOVER_EVIDENCE_PATH", "RUNTIME_FIRST_CUTOVER_EVIDENCE_ID", "RUNTIME_FIRST_CUTOVER_EVIDENCE_SHA256", "RUNTIME_ORIGINAL_IDENTITIES_SHA256"],
+    "runtimeReadiness": ["database", "redis", "keyring"],
+    "cloudProof": "exact provider project, environment, image/SDK/builtin/codec inventory and real content-hashed acceptance artifacts; no VERIFIED boolean"
+  },
+  "childForbidden": ["RUNTIME_LAUNCHER_KEY", "RUNTIME_CONTROL_KEY", "INTERNAL_SERVER_KEY", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "LIVEKIT_SIP_OUTBOUND_TRUNK", "RAG_RETRIEVAL_CAPABILITY_SECRET", "RAG_URL", "WIDESHOT_API_KEY", "WIDESHOT_BASE_URL", "WIDESHOT_SMS_CALLBACK_NUMBER", "WIDESHOT_RESELLER_CODE", "WIDESHOT_TIMEOUT_MS", "API_TOOL_ALLOWED_PRIVATE_ORIGINS", "VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY", "OPENBAO_STATIC_SEAL_KEY_B64", "OPENBAO_STATIC_SEAL_FILE"],
+  "openbao": {
+    "required": ["OPENBAO_SEAL_MODE"],
+    "sealMode": "static",
+    "exactlyOneExistingKeySource": ["OPENBAO_STATIC_SEAL_FILE", "OPENBAO_STATIC_SEAL_KEY_B64"],
+    "keyBytes": 32,
+    "existingKeyId": "port-macos-keychain-v1",
+    "runtimeKeyPath": "/bao/seal-runtime/current.key",
+    "portableRuntimeKeyPath": "/dev/shm/port-bao-seal/current.key",
+    "platformRequired": ["PORT", "OPENBAO_EXPECTED_CLUSTER_ID", "OPENBAO_SEAL_RUNTIME_DIR", "original raft/audit/TLS mounts"],
+    "platformReadinessPath": "/readyz",
+    "platformLivenessPath": "/livez",
+    "runtimeStorage": "tmpfs",
+    "automaticInitialization": false,
+    "automaticSealMigration": false,
+    "automaticKeyGeneration": false,
+    "readinessPath": "/v1/sys/health",
+    "readyRequires": ["initialized", "unsealed", "HTTPS verified with explicit CA", "original raft and envelope manifest preserved"]
+  },
+  "dataPosture": {
+    "postgresql": "One fenced writable primary; provider-managed promotion and measured committed-write durability required. Single-node fixture is NOT HA. No RPO=0 claim.",
+    "redis": "AOF everysec fixture is not zero-loss durability. Missing raw form values remain lost/unconfirmed, never reconstruct or ACK without encrypted checkpoint consumption.",
+    "openbao": "Portable availability uses the SAME static seal bytes and existing key ID plus original raft data/KEK/DEKs. No reinitialization or replacement key can decrypt old ciphertext.",
+    "outage": "Withdraw admission and fail closed when current SQL, Redis requirements, keyring, compatibility or OpenBao readiness cannot be proven. No second independent database/Bao master."
+  },
+  "externalAcceptanceGates": ["cloudAssignmentFreshness", "cloudAbsentParticipantRevocation", "cloudTokenRefreshRevocation", "railwayPlacement", "railwaySignalGrace", "postgresqlFailoverDurability", "redisStateLoss", "productionSealAvailability"],
+  "cutover": {
+    "legacyDrainRequired": ["activeSessions", "pendingAdmissions", "pendingUsage", "legacyCredentialRoutes", "legacyInflightOperations"],
+    "firstEvidenceSchema": "config/runtime-first-cutover-evidence.schema.json",
+    "firstAdmissionIdentity": {"field": "firstCutoverEvidence", "required": ["evidenceId", "evidenceHash"]},
+    "retainedPoolAttestation": ["firstCutoverEvidenceId", "firstCutoverEvidenceHash", "firstCutoverAuthorizedAt"],
+    "everyEnable": "actual approved immutable first artifact or retained same first attestation, current image/media/key/DB proof and current zero legacy census; resume/rollback never bypass or repeat first rotation",
+    "localOssAcceptance": "ordinary enabling remains blocked by unproven external/cutover proof; local control/data/crypto observations never prove Cloud fencing or two-pool HA activation",
+    "automaticCredentialRotation": false,
+    "credentialRotationCommand": "runtime_fleet.py rotate-credentials --approval <owner-only approval.json>",
+    "credentialRotationProofSchema": "config/runtime-credential-rotation.schema.json",
+    "credentialRotationProof": "explicit expiring owner-only approval, each exposed credential class revoked and replaced, old credential denied, replacement accepted, actual redacted content-hashed provider receipts; process exit zero alone is unproven",
+    "forbiddenRotationTargets": ["OpenBao static seal", "original raft", "envelope KEK", "envelope DEKs"],
+    "laterRollback": "only exact protocol/SDKpatch/builtin/codec compatible immutable HA images",
+    "legacyOptionalOwnerRollback": false
+  }
+}

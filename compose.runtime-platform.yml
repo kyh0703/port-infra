@@ -1,0 +1,22 @@
+# Apply ONLY after the positively owned fixture Bao has initialized original
+# raft/envelope data, and STOP its prior writer before recreation. This exercises
+# the production portable /dev/shm key+PORT health image on the SAME fixture data.
+services:
+  openbao:
+    image: ${RUNTIME_HA_PLATFORM_BAO_IMAGE:?Provide immutable portable Bao image}
+    entrypoint: []
+    command: ["python3", "/usr/local/bin/openbao-platform"]
+    environment:
+      PORT: "8000"
+      OPENBAO_SEAL_RUNTIME_DIR: /dev/shm/port-bao-seal
+      OPENBAO_EXPECTED_CLUSTER_ID: ${RUNTIME_HA_EXPECTED_CLUSTER_ID:?Original initialized fixture cluster ID required}
+      OPENBAO_SHUTDOWN_MS: "30000"
+    ports:
+      - "127.0.0.1::8000"
+    stop_signal: SIGTERM
+    stop_grace_period: 45s
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2).read()"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

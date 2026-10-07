@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "deploy": {
+    "startCommand": "node --import ./instrument.mjs dist/main.js",
+    "healthcheckPath": "/api/v1/health",
+    "healthcheckTimeout": 180,
+    "numReplicas": 2,
+    "overlapSeconds": "15",
+    "drainingSeconds": "45",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}

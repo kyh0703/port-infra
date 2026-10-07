@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "port:runtime-ha:provider-config:v1",
+  "type": "object",
+  "required": ["projectId", "environmentId", "livekitProjectId", "builds", "services"],
+  "properties": {
+    "projectId": {"type": "string", "minLength": 1},
+    "environmentId": {"type": "string", "minLength": 1},
+    "livekitProjectId": {"type": "string", "minLength": 1},
+    "builds": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/build"}},
+    "services": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/service"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "codeHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "build": {
+      "type": "object",
+      "required": ["protocolRevision", "buildId", "imageDigest", "compatibilityFingerprint", "sdkPatchDigest", "builtinInventoryDigest", "modelCacheSelectionDigest", "checkpointCodec"],
+      "properties": {
+        "protocolRevision": {"const": "runtime-recovery-v1"},
+        "checkpointCodec": {"const": "port-runtime-checkpoint-v1"},
+        "buildId": {"type": "string", "minLength": 1},
+        "imageDigest": {"$ref": "#/$defs/digest"},
+        "compatibilityFingerprint": {"$ref": "#/$defs/codeHash"},
+        "sdkPatchDigest": {"$ref": "#/$defs/codeHash"},
+        "builtinInventoryDigest": {"$ref": "#/$defs/codeHash"},
+        "modelCacheSelectionDigest": {"$ref": "#/$defs/codeHash"}
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": ["serviceId", "role", "imageReference", "replicas", "regions", "startCommand", "healthcheckPath", "drainingSeconds"],
+      "properties": {
+        "serviceId": {"type": "string", "minLength": 1},
+        "role": {"enum": ["pool-a", "pool-b", "api", "openbao"]},
+        "poolId": {"type": "string", "minLength": 1},
+        "imageReference": {"type": "string", "pattern": "^[^\\s]+@sha256:[0-9a-f]{64}$"},
+        "replicas": {"type": "integer", "minimum": 1},
+        "regions": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "integer", "minimum": 1}},
+        "startCommand": {"type": "string", "minLength": 1},
+        "healthcheckPath": {"type": "string", "pattern": "^/"},
+        "drainingSeconds": {"type": "integer", "minimum": 45}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"role": {"enum": ["pool-a", "pool-b"]}}},
+          "then": {"required": ["poolId"], "properties": {"replicas": {"minimum": 2}, "healthcheckPath": {"const": "/readyz"}}}
+        },
+        {
+          "if": {"properties": {"role": {"const": "openbao"}}},
+          "then": {"properties": {"replicas": {"const": 1}, "healthcheckPath": {"const": "/readyz"}}}
+        }
+      ]
+    }
+  }
+}

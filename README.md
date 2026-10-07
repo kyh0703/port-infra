@@ -806,6 +806,73 @@ make openbao-logs
 make openbao-down
 ```
 
+### 런타임 HA용 portable OpenBao: 원본 데이터·키 보존
+
+`openbao/Dockerfile.platform`은 Mac 로그인 Keychain supervisor 없이도 기존 static
+seal과 Raft를 사용하는 배포 이미지다. **이미 static seal로 초기화된 동일한
+Raft·audit·TLS·seal key를 이전하는 경로**이며, 새 key나 새 cluster로 원본을
+대체하지 않는다. 단일 Raft writer 자체를 다중 노드 HA로 만드는 기능은 아니다.
+
+- `OPENBAO_EXPECTED_CLUSTER_ID`는 이전에 기록한 원래 `cluster_id`다.
+  원본 Raft/audit/TLS가 없거나 cluster가 달라지면 기동·readiness를 거부한다.
+- 승인된 원본 32-byte key를 `OPENBAO_STATIC_SEAL_FILE` 또는
+  `OPENBAO_STATIC_SEAL_KEY_B64` 중 **하나만** 공급한다. 새 key 생성·자동 init·
+  재초기화·rotation은 수행하지 않는다. 기존 key ID도 유지한다.
+  key를 출력하거나 Git·명령 인자·일반 로그에 넣지 않는다.
+- key loader는 `/dev/shm` 또는 전용 tmpfs의 owner-only 파일을 사용한다.
+  TLS는 읽기 전용 원본에서 ephemeral 경로로만 복사한다. 원본 Raft/audit의
+  owner를 재귀적으로 변경하거나 삭제하지 않는다.
+- 기존 writer를 먼저 중지한 뒤 동일 volume을 새 writer에 연결한다.
+  API에는 같은 AppRole과 원래 envelope DEK manifest를 공급한다.
+  초기화 결과를 잃었다면 원본 상태와 자료를 보존하고 중단한다.
+  새 root token/key로 대체하거나 `init`을 다시 호출하지 않는다.
+
+`PORT`는 HTTP health listener이며 Bao TLS `8200`·cluster `8201`과 달라야 한다.
+정확한 probe 경로와 의미는 다음과 같다.
+
+| 대상 | 경로 | 성공 조건 |
+| --- | --- | --- |
+| HTTP `PORT` | `/livez` | 소유한 Bao 프로세스가 살아 있음. 키 접근 증거는 아님 |
+| HTTP `PORT` | `/startupz`, `/readyz` | 엄격한 CA 검증을 통과한 원본 TLS cluster가 initialized·unsealed이고 `cluster_id`가 일치 |
+| Bao TLS `8200` | `/v1/sys/health` | Bao 자체 상태. HTTP health listener와 별도 |
+
+`/health` 등 다른 경로의 404를 readiness 증거로 사용하지 않는다.
+API keyring/readiness는 별도로 실제 원본 DEK 접근을 확인해야 한다.
+shutdown은 소유한 프로세스 그룹에 TERM을 전달하고 최대 35초 안에 정리한다.
+Railway 설정의 45초 grace는 설정값이며 실제 외부 signal 전달 증거가 아니다.
+
+격리 fixture에서는 다음 명령을 **이미 부트스트랩한 동일 소유 state**에 적용한다.
+`OWNED_STATE`는 `runtime_fixtures.py prepare`로 만든 절대 경로이고,
+`PLATFORM_IMAGE`는 검증한 불변 이미지다. 운영 Compose project `infra`에는
+이 fixture 명령을 적용하지 않는다.
+
+```sh
+python3 scripts/runtime_fixtures.py --state-dir "$OWNED_STATE" up \
+  --platform-image "$PLATFORM_IMAGE"
+python3 scripts/runtime_fixtures.py --state-dir "$OWNED_STATE" status
+```
+
+helper는 label/UUID 소유권, 현재 unsealed 원본 cluster와 기존 bootstrap 기록을
+먼저 대조한다. 원본 writer를 중지하고 같은 Raft/seal로 교체하며, 이미 초기화된
+fixture에는 다시 init하지 않는다. `status`가 반환한 실제 health/TLS port를
+각각 위 경로에 사용한다. fixture teardown은 명시적으로 소유한 자원만 대상으로
+하며 외부 state와 키 파일은 보존한다.
+
+통합 검증 담당자는 새로 격리한 fixture에서 실제 portable-image 교체,
+동일 원본 Raft cluster·AppRole·envelope DEK 3개의 복호화를 확인했다.
+원본 `cluster_id`는 `a9e9385f-b522-6b5d-c5f4-1dba9b8a4b3d`이며 교체 후에도
+동일했다. 실제 `/livez`는 200·`probeScope=process`·
+`originalClusterReadiness=not-probed`였고, `/startupz`·`/readyz`는 각각
+200·`probeScope=original-cluster-tls`·`originalClusterReadiness=observed`였다.
+이는 해당 Bao의 프로세스·원본 cluster probe 결과이며 API readiness 증거는 아니다.
+Linux API UID 1001의 엄격한 TLS 접근, 잘못된 AAD 거부, 같은 암호문을 보존한
+서버 stop/start도 확인했다. 사용한 portable-image manifest-list digest는
+`sha256:b12c8738eb19e996adf2595a9e40c4a7d4d76725c1a73f22ccd2807d67a44576`이다.
+이 결과는 기존 운영 Keychain·데이터를 변경한 배포나 production seal availability,
+다중 노드 Bao HA, RPO0의 증거가 아니다. LiveKit Cloud·Railway의 외부 승인 gate도
+이 로컬 암호화 검증으로 대체하지 않는다.
+
+
 `postgres-app-init`은 기존 volume의 app role과 `aggregator` NOLOGIN role을 idempotent하게
 보정한 뒤 API migration과 Aggregator가 시작되도록 한다. 기존 데이터와 owner는 삭제하지 않는다.
 
@@ -980,3 +1047,76 @@ make db-ensure-user
 ```
 
 전체 volume 삭제는 realm과 로컬 데이터를 제거하므로 `docker compose down -v`를 사용하지 않는다.
+
+## Runtime HA — 격리 fleet와 운영 cutover
+
+contracts `8.0.0` / `runtime-recovery-v1`을 같은 릴리스로 배포한다.
+API의 pinned canonical migration은 169개다. 기존 production image·override·DB는
+이 검증 경로에서 변경하지 않는다. 일반 서비스 `down -v`나 `.env*` 자동 복사는 금지한다.
+
+### 양성 소유권이 있는 로컬 fixture
+
+- `scripts/runtime_fixtures.py prepare`가 private state·소유자 UUID·project label과
+  loopback 포트·CA·해당 fixture의 Bao key 상태를 만든다.
+  모든 fault/restore/down은 같은 state와 양성 ownership 검증을 통과해야 한다.
+- `scripts/runtime_images.py build`는 실제 Docker image를 빌드하고 immutable digest와
+  설치된 SDK executable/native/patch/model-cache/codec inventory를 새 파일에 기록한다.
+  Source A/B는 같은 compatibility fingerprint여야 하며 각 pool은 최소 2개 replica다.
+  A/B 실제 inventory를 모두 검사하고 protocol·codec·호환 cohort가 일치한 뒤에만
+  pin과 runtime env를 기록한다. ambient `DOCKER_HOST`와 remote context는 거부한다.
+  Bao token·seal key·TLS key는 bounded no-follow 읽기와 UID·private mode 검사를 거친다.
+- fixture의 첫 `up`은 data를 시작한다. 아래 전체 `up`은 실제 migrator와 API 2개,
+  Worker A/B를 시작한다. API/migrator image와 A/B inventory를 모두 같이 지정한다.
+  이미 고정된 runtime pin이나 evidence output을 덮어쓰지 않는다.
+
+```bash
+# STATE는 해당 작업에서 prepare한 private fixture 경로다.
+# macOS의 이 검증은 DOCKER_CONTEXT=colima를 쓴다.
+env -u DOCKER_HOST DOCKER_CONTEXT=colima python3 scripts/runtime_fixtures.py \
+  --state-dir "$STATE" up \
+  --api-image "$API_IMMUTABLE_IMAGE" --migrator-image "$MIGRATOR_IMMUTABLE_IMAGE" \
+  --inventory-a "$INVENTORY_A" --inventory-b "$INVENTORY_B" --replicas 2
+
+env -u DOCKER_HOST DOCKER_CONTEXT=colima python3 scripts/runtime_smoke.py \
+  --state-dir "$STATE" --replicas 2 --include-signal --output "$NEW_SMOKE_OUTPUT"
+```
+
+smoke는 각 복구 뒤 새 non-enabling withdrawal revision의 ACK를 기다린다.
+native 등록·건강·asset 준비, launcher/incarnation/worker ID와 registry ACK·inventory를
+함께 확인한다. 이미 blocked인 `readyz=503`만으로 data/control outage를 증명하지 않는다.
+control HTTP는 기존 API success envelope의 `data`를 읽으며 bare payload나
+transport와 다른 status의 envelope는 거부한다.
+동일 Bao seal의 30초 관찰과 같은 key 복구는 첫 restore 동작부터 60초를 센다.
+API restart 뒤에는 현재 owned loopback binding을 다시 읽고 control client도 교체한다.
+봉인 관찰은 이전 포트의 연결 실패를 근거로 삼지 않는다. 바인딩이 없는
+중단 상태와 `Restarting=true, PID=0`만 비서비스 상태로 인정하며 미확인 live binding은 실패한다.
+TERM 전 정확한 A container와 incarnation의 CPP·native pending/assigned/launching/running이
+모두 EMPTY여야 한다. signal 동작부터 45초를 세며 `docker wait`의 native 종료 이벤트와
+최종 inspect를 관찰한다. 각 원래 target의 exit code는 정확히 정수 0이어야 한다.
+늦은 성공·비정상/미확인 exit도 실패이며 elapsed/budget·exit code를 증거에 기록한다.
+빈 fleet 종료는 active inference/Cloud signal 전달 증거가 아니다.
+fault 후 같은 소유 fixture를 restore하며, `--remove-owned-volumes`는 이 fixture에만 쓴다.
+
+### 운영 허가와 증거 경계
+
+- `/startupz`, `/livez`가 정상이어도 native 최초 admission 증거가 없으면 `/readyz`는
+  `503`이다. 닫힌 control ACK는 가능하지만 admission enable로 first-proof 승인을 우회하지 않는다.
+- `scripts/runtime_fleet.py preflight/cutover`는 실제 환경·provider project·불변 inventory,
+  전체 fleet replica·data readiness·동일 Bao cluster/CA, 승인된 external evidence를 요구한다.
+  cutover는 추가로 legacy drain·credential rotation 확인과 API에 mount된
+  같은 first-cutover artifact의 ID/hash를 확인한 뒤에만 admission을 연다.
+- `withdraw`는 SDK worker를 불가역 drain하지 않고 admission만 내린다.
+  compatible rollback은 원래 compatibility fingerprint·inventory·실제 replica를 확인한다.
+- Cloud 최초 assignment/build placement·absent/stale participant token revocation,
+  active provider signal·실제 SIP/PSTN, production Bao/key availability,
+  PostgreSQL failover/RPO 0·Redis state loss는 별도 외부 acceptance gate다.
+  OSS local 또는 historical SQL tuple은 이 gate의 native evidence가 아니다.
+- CLI 회귀 146개, private data bootstrap, pinned 일반 migrator 169개 up·pending 0을
+  확인했다. 최종 `fleet-c51-final169-9a14`의 API 2개·A/B 각 2개 replica에서
+  실제 smoke 11개 관찰을 통과했다. PostgreSQL·Redis·API outage/restore와
+  새 withdrawal ACK·native inventory를 확인했다. Bao 봉인 30초 동안 plaintext
+  fallback은 없었으며 같은 key·원래 데이터 복구는 5.81초/60초였다.
+  EMPTY A-fleet SIGTERM은 1.18초/45초, 원래 두 container의 exit `[0, 0]`이었다.
+  evidence는 private state의 `smoke-api5-worker8-final.json`에 보존한다.
+  소유 fleet만 down했고 volumes·key state·inventory·evidence는 유지했다.
+

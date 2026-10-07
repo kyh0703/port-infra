@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:port:runtime-first-cutover-evidence:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "evidenceId", "provider", "projectId", "environmentId", "protocolRevision", "observedAt", "originalIdentities", "originalIdentityEvidence", "rotationReceipt", "legacyDrain", "preservation"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "evidenceId": {"type": "string", "format": "uuid"},
+    "provider": {"const": "livekit-cloud"},
+    "projectId": {"type": "string", "minLength": 1},
+    "environmentId": {"type": "string", "minLength": 1},
+    "protocolRevision": {"const": "runtime-recovery-v1"},
+    "observedAt": {"$ref": "#/$defs/utcTimestamp"},
+    "originalIdentities": {
+      "type": "object", "additionalProperties": false,
+      "required": ["credentials", "data", "keys"],
+      "properties": {
+        "credentials": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["credentialClass", "identity"],
+            "properties": {
+              "credentialClass": {"$ref": "runtime-credential-rotation.schema.json#/$defs/credentialClass"},
+              "identity": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "data": {"$ref": "#/$defs/identitySet"},
+        "keys": {"$ref": "#/$defs/identitySet"}
+      }
+    },
+    "originalIdentityEvidence": {"$ref": "#/$defs/artifact"},
+    "rotationReceipt": {"$ref": "#/$defs/artifact"},
+    "legacyDrain": {
+      "type": "object", "additionalProperties": false,
+      "required": ["observedAt", "counts", "artifacts"],
+      "properties": {
+        "observedAt": {"$ref": "#/$defs/utcTimestamp"},
+        "counts": {
+          "type": "object", "additionalProperties": false,
+          "required": ["activeSessions", "pendingAdmissions", "pendingUsage", "legacyCredentialRoutes", "legacyInflightOperations"],
+          "properties": {
+            "activeSessions": {"const": 0}, "pendingAdmissions": {"const": 0},
+            "pendingUsage": {"const": 0}, "legacyCredentialRoutes": {"const": 0},
+            "legacyInflightOperations": {"const": 0}
+          }
+        },
+        "artifacts": {"$ref": "#/$defs/artifacts"}
+      }
+    },
+    "preservation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["observedAt", "data", "keys", "artifacts"],
+      "properties": {
+        "observedAt": {"$ref": "#/$defs/utcTimestamp"},
+        "data": {"$ref": "#/$defs/identitySet"},
+        "keys": {"$ref": "#/$defs/identitySet"},
+        "artifacts": {"$ref": "#/$defs/artifacts"}
+      }
+    }
+  },
+  "$defs": {
+    "utcTimestamp": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "identitySet": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "artifact": {"$ref": "runtime-credential-rotation.schema.json#/$defs/artifact"},
+    "artifacts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifact"}}
+  }
+}

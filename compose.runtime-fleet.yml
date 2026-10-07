@@ -1,0 +1,146 @@
+# Layer ONLY on compose.runtime-ha.yml. Images are immutable build outputs.
+x-api-environment: &api-environment
+  NODE_ENV: test
+  PORT: "8000"
+  GRPC_PORT: "8080"
+  DATABASE_URL: postgresql://runtime_ha:${RUNTIME_HA_POSTGRES_PASSWORD:?Fixture password required}@postgres:5432/runtime_ha
+  REDIS_URL: redis://redis:6379/0
+  LIVEKIT_URL: ws://livekit:7880
+  LIVEKIT_API_KEY: fixture-runtime-ha
+  LIVEKIT_API_SECRET: ${RUNTIME_HA_LIVEKIT_SECRET:?Fixture secret required}
+  RUNTIME_LIVEKIT_PROVIDER: livekit-oss
+  RUNTIME_LIVEKIT_PROJECT_ID: ${RUNTIME_HA_OWNER:?Actual isolated OSS server identity required}
+  RUNTIME_ENVIRONMENT_ID: ${RUNTIME_HA_OWNER:?Actual isolated environment identity required}
+  OPENBAO_ADDR: https://openbao:8200
+  OPENBAO_CA_CERT_FILE: /run/openbao-ca/ca.crt
+  OPENBAO_ROLE_ID_FILE: /run/openbao/api-role-id
+  OPENBAO_SECRET_ID_FILE: /run/openbao/api-secret-id
+  INTERNAL_SERVER_KEY: ${RUNTIME_HA_INTERNAL_SERVER_KEY:?Fixture key required}
+  RUNTIME_LAUNCHER_KEY: ${RUNTIME_HA_LAUNCHER_KEY:?Fixture launcher key required}
+  RUNTIME_CONTROL_KEY: ${RUNTIME_HA_CONTROL_KEY:?Fixture control key required}
+  AUTH_PASSWORD_RESET_SECRET: ${RUNTIME_HA_AUTH_SECRET:?Fixture auth secret required}
+  AUTH_EMAIL_VERIFICATION_SECRET: ${RUNTIME_HA_AUTH_SECRET:?Fixture auth secret required}
+  AUTH_RATE_LIMIT_SECRET: ${RUNTIME_HA_AUTH_SECRET:?Fixture auth secret required}
+  WEB_CHAT_RESUME_TOKEN_SECRET: ${RUNTIME_HA_AUTH_SECRET:?Fixture auth secret required}
+  AUTH_SESSION_COOKIE_SECURE: "false"
+  WEB_ORIGIN: http://127.0.0.1:3000
+  API_PUBLIC_BASE_URL: http://127.0.0.1:8000
+  RAG_URL: ${RUNTIME_HA_RAG_URL:-http://rag:8000}
+  RAG_RETRIEVAL_CAPABILITY_SECRET: ${RUNTIME_HA_RAG_SECRET:?Fixture RAG secret required}
+  VOICE_RUNTIME_CREDENTIAL_ENCRYPTION_KEY: ${RUNTIME_HA_CREDENTIAL_KEY:?Fixture credential key required}
+
+x-api-volumes: &api-volumes
+  - ${RUNTIME_HA_STATE_DIR:?Fixture directory required}/tls/ca.crt:/run/openbao-ca/ca.crt:ro
+  - api_credentials:/run/openbao:ro
+
+x-worker: &worker
+  labels:
+    io.port.runtime-ha.fixture: "true"
+    io.port.runtime-ha.owner: ${RUNTIME_HA_OWNER:?Fixture owner required}
+  restart: on-failure
+  stop_signal: SIGTERM
+  stop_grace_period: 45s
+  depends_on:
+    api:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  ports:
+    - "127.0.0.1::8000"
+  healthcheck:
+    # Fixture process health is not unproven Cloud/first-cutover admission.
+    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/startupz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    interval: 2s
+    timeout: 2s
+    retries: 30
+    start_period: 30s
+  deploy:
+    replicas: ${RUNTIME_HA_POOL_REPLICAS:-2}
+
+x-worker-environment: &worker-environment
+  NODE_ENV: production
+  PORT: "8000"
+  SDK_HTTP_PORT: "8081"
+  LIVEKIT_URL: ws://livekit:7880
+  LIVEKIT_API_KEY: fixture-runtime-ha
+  LIVEKIT_API_SECRET: ${RUNTIME_HA_LIVEKIT_SECRET:?Fixture secret required}
+  RUNTIME_LIVEKIT_PROVIDER: livekit-oss
+  RUNTIME_LIVEKIT_PROJECT_ID: ${RUNTIME_HA_OWNER:?Actual isolated OSS server identity required}
+  RUNTIME_ENVIRONMENT_ID: ${RUNTIME_HA_OWNER:?Actual isolated environment identity required}
+  INTERNAL_API_BASE_URL: http://api:8000/api/v1
+  VOICE_RUNTIME_GRPC_ADDR: api:8080
+  REDIS_URL: redis://redis:6379/0
+  RUNTIME_LAUNCHER_KEY: ${RUNTIME_HA_LAUNCHER_KEY:?Fixture launcher key required}
+  RUNTIME_HEARTBEAT_MS: "1000"
+  RUNTIME_SHUTDOWN_MS: "30000"
+  RUNTIME_CHILD_SHUTDOWN_MS: "5000"
+  RUNTIME_ASSIGNMENT_TIMEOUT_MS: "7500"
+
+services:
+  api-migrator:
+    image: ${RUNTIME_HA_MIGRATOR_IMAGE:?Provide immutable runtime HA migrator image}
+    labels:
+      io.port.runtime-ha.fixture: "true"
+      io.port.runtime-ha.owner: ${RUNTIME_HA_OWNER:?Fixture owner required}
+    environment:
+      <<: *api-environment
+      # New isolated bootstrap only: CONCURRENTLY migrations require commits
+      # between migration files. Never rewrite an existing migration history.
+      MIKRO_ORM_MIGRATIONS_ALL_OR_NOTHING: "false"
+    volumes: *api-volumes
+    depends_on:
+      postgres:
+        condition: service_healthy
+      openbao:
+        condition: service_healthy
+
+  api:
+    image: ${RUNTIME_HA_API_IMAGE:?Provide immutable runtime HA API image}
+    labels:
+      io.port.runtime-ha.fixture: "true"
+      io.port.runtime-ha.owner: ${RUNTIME_HA_OWNER:?Fixture owner required}
+    environment: *api-environment
+    volumes: *api-volumes
+    restart: on-failure
+    stop_signal: SIGTERM
+    stop_grace_period: 45s
+    depends_on:
+      api-migrator:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      openbao:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1::8000"
+      - "127.0.0.1::8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 30s
+    deploy:
+      replicas: ${RUNTIME_HA_API_REPLICAS:-2}
+
+  pool-a:
+    <<: *worker
+    image: ${RUNTIME_HA_WORKER_A_IMAGE:?Provide immutable runtime HA pool A image}
+    environment:
+      <<: *worker-environment
+      RUNTIME_POOL_ID: fixture-a
+      AGENT_NAME: runtime-ha-fixture-a
+      RUNTIME_BUILD_ID: ${RUNTIME_HA_WORKER_A_BUILD_ID:?Pool A build ID required}
+      RUNTIME_COMPATIBILITY_FINGERPRINT: ${RUNTIME_HA_WORKER_A_FINGERPRINT:?Pool A fingerprint required}
+      RUNTIME_IMAGE_DIGEST: ${RUNTIME_HA_WORKER_A_DIGEST:?Pool A immutable image digest required}
+
+  pool-b:
+    <<: *worker
+    image: ${RUNTIME_HA_WORKER_B_IMAGE:?Provide immutable runtime HA pool B image}
+    environment:
+      <<: *worker-environment
+      RUNTIME_POOL_ID: fixture-b
+      AGENT_NAME: runtime-ha-fixture-b
+      RUNTIME_BUILD_ID: ${RUNTIME_HA_WORKER_B_BUILD_ID:?Pool B build ID required}
+      RUNTIME_COMPATIBILITY_FINGERPRINT: ${RUNTIME_HA_WORKER_B_FINGERPRINT:?Pool B fingerprint required}
+      RUNTIME_IMAGE_DIGEST: ${RUNTIME_HA_WORKER_B_DIGEST:?Pool B immutable image digest required}

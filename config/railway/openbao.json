@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "deploy": {
+    "startCommand": "python3 /usr/local/bin/openbao-platform",
+    "healthcheckPath": "/readyz",
+    "healthcheckTimeout": 180,
+    "numReplicas": 1,
+    "overlapSeconds": "0",
+    "drainingSeconds": "45",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}

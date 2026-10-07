@@ -1,0 +1,109 @@
+# Standalone fixture; NEVER combine with compose.yml or the production .env.
+x-fixture-labels: &fixture-labels
+  io.port.runtime-ha.fixture: "true"
+  io.port.runtime-ha.owner: ${RUNTIME_HA_OWNER:?Use scripts/runtime_fixtures.py prepare}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    labels: *fixture-labels
+    environment:
+      POSTGRES_DB: runtime_ha
+      POSTGRES_USER: runtime_ha
+      POSTGRES_PASSWORD: ${RUNTIME_HA_POSTGRES_PASSWORD:?Fixture password required}
+    ports:
+      - "127.0.0.1::5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./tests/fixtures/runtime-ha-postgres.sql:/docker-entrypoint-initdb.d/01-runtime-ha.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U runtime_ha -d runtime_ha"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    labels: *fixture-labels
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      - "127.0.0.1::6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    labels: *fixture-labels
+    command: ["--config", "/etc/livekit/fixture.yaml"]
+    ports:
+      - "127.0.0.1::7880"
+      - "127.0.0.1::7881"
+    volumes:
+      - type: bind
+        source: ${RUNTIME_HA_STATE_DIR:?Fixture directory required}/livekit.yaml
+        target: /etc/livekit/fixture.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+
+  openbao:
+    image: ghcr.io/openbao/openbao:2.6.2
+    labels: *fixture-labels
+    user: "0:0"
+    entrypoint: ["sh", "/usr/local/bin/platform-entrypoint"]
+    command: ["/usr/local/bin/openbao-entrypoint", "server", "-config=/bao/config/openbao.hcl"]
+    environment:
+      BAO_ADDR: https://openbao:8200
+      BAO_CACERT: /bao/tls-runtime/ca.crt
+      OPENBAO_SEAL_MODE: static
+      OPENBAO_STATIC_SEAL_FILE: /run/secrets/existing-static-seal
+    ports:
+      - "127.0.0.1::8200"
+    volumes:
+      - openbao_data:/bao/data
+      - openbao_audit:/bao/audit
+      - api_credentials:/fixture-api-credentials
+      - ./openbao/config.hcl:/bao/config/openbao.hcl:ro
+      - ./openbao/seal-static.hcl:/bao/config/seal-static.hcl:ro
+      - ./openbao/entrypoint.sh:/usr/local/bin/openbao-entrypoint:ro
+      - ./openbao/platform-entrypoint.sh:/usr/local/bin/platform-entrypoint:ro
+      - type: bind
+        source: ${RUNTIME_HA_STATE_DIR:?Fixture directory required}/seal.key
+        target: /run/secrets/existing-static-seal
+        read_only: true
+        bind:
+          create_host_path: false
+      - ${RUNTIME_HA_STATE_DIR:?Fixture directory required}/tls/ca.crt:/bao/tls/ca.crt:ro
+      - ${RUNTIME_HA_STATE_DIR:?Fixture directory required}/tls/server.crt:/bao/tls/server.crt:ro
+      - ${RUNTIME_HA_STATE_DIR:?Fixture directory required}/tls/server.key:/bao/tls/server.key:ro
+    tmpfs:
+      - /bao/tls-runtime
+      - /bao/seal-runtime
+    healthcheck:
+      # Sealed (exit 2) is deliberately NOT ready. Uninitialized fixture is
+      # bootstrapped only by the ownership-checked fixture command.
+      test: ["CMD-SHELL", "bao status -format=json >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+volumes:
+  postgres_data:
+    labels: *fixture-labels
+  redis_data:
+    labels: *fixture-labels
+  openbao_data:
+    labels: *fixture-labels
+  openbao_audit:
+    labels: *fixture-labels
+  api_credentials:
+    labels: *fixture-labels
+
+networks:
+  default:
+    labels: *fixture-labels

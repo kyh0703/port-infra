@@ -164,6 +164,7 @@ tailscale-ingress:
 test:
 	python3 tests/test_internal_key_init.py
 	python3 -m unittest discover -s tests -p 'test_openbao*.py'
+	python3 -m unittest discover -s tests -p 'test_runtime*.py'
 	COMPOSE="$(COMPOSE)" bash tests/compose.sh
 	bash tests/commands.sh
 	$(MAKE) test-ingress
