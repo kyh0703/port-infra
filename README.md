@@ -652,6 +652,8 @@ UI 글꼴은 Pretendard Variable v1.3.9를 jsDelivr에서 동적 서브셋으로
   `ghost-content-init`은 content 볼륨 소유권만 초기화하고, Ghost는 `node` 사용자로 실행한다.
   테마 원본에는 소유권 변경을 하지 않는다.
 
+헤더 좌측 로고는 `https://macbookpro.tail9f349d.ts.net:8443/`의 웹 메인으로 이동한다.
+블로그 홈 아이콘과 푸터 링크는 블로그 홈으로 이동한다.
 헤더 우측의 **문의하기**는 `https://macbookpro.tail9f349d.ts.net:8443/contact`로 이동한다.
 현재 주소는 같은 Tailnet에 참여한 기기에서 사용할 수 있다.
 RSS 링크는 유지하며 640px 이하에서는 헤더 RSS만 숨겨 문의 버튼 공간을 확보한다.
@@ -660,7 +662,7 @@ RSS 링크는 유지하며 640px 이하에서는 헤더 RSS만 숨겨 문의 버
 **문의하기**를 테마별 반투명 버튼으로 전환한다. 상단 원래 버튼과 RSS 색상은 유지한다.
 블러는 바 한 겹에만 적용하며, 블러 미지원·투명도 감소 설정에서는 불투명 배경을 사용한다.
 CSS만 변경할 때는 테마 디렉터리에서 `npm run build:css`로 `assets/css/screen.css`를 갱신한다.
-공개 도메인이 준비되면 `ghost/theme/tello/default.hbs`의 문의 주소를 변경한다.
+공개 도메인이 준비되면 `ghost/theme/tello/default.hbs`의 로고·문의 주소를 함께 변경한다.
 미리보기의 사이트 제목도 `overthinker`로 변경했다. 새 설치에서는 관리자 General에서
 사이트 제목을 설정한다. 운영 글·계정·언어·코드 삽입 설정·업로드 이미지는 가져오지 않았다.
 운영 HTML의 Ghost 버전은 6.55, 로컬 검증 버전은 6.65이며 운영 DB는 변경하지 않았다.
