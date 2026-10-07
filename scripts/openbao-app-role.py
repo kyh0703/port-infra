@@ -217,7 +217,10 @@ def _run_docker(args: list[str], input_data: Optional[bytes] = None) -> None:
 
 
 class CredentialVolume:
-    def __init__(self, name: str, image: str):
+    def __init__(self, name: str, image: str, *, credential_prefix: str = "api", owner_uid: int = 1001):
+        if credential_prefix not in {"api", "rag"} or owner_uid not in {1000, 1001}:
+            raise ProvisionError("unsupported credential volume profile")
+        self.credential_prefix, self.owner_uid = credential_prefix, owner_uid
         if not VOLUME_NAME_PATTERN.fullmatch(name):
             raise ProvisionError("credential volume name contains unsupported characters")
         self.name = name
@@ -282,6 +285,7 @@ rm -f "$tmpdir/api-role-id" "$tmpdir/api-secret-id"
 rmdir "$tmpdir"
 trap - EXIT
 """
+        script = script.replace("api-role-id", f"{self.credential_prefix}-role-id").replace("api-secret-id", f"{self.credential_prefix}-secret-id").replace("1001:1001", f"{self.owner_uid}:{self.owner_uid}")
         input_data = f"{role_id}\n{secret_id}\n".encode("utf-8")
         _run_docker(
             [
@@ -327,9 +331,9 @@ def _policies(value: Any) -> list[str]:
     return []
 
 
-def desired_role_payload() -> dict[str, Any]:
+def desired_role_payload(policy_name: str = POLICY_NAME) -> dict[str, Any]:
     return {
-        "token_policies": [POLICY_NAME],
+        "token_policies": [policy_name],
         "token_ttl": "300s",
         "token_max_ttl": "300s",
         "token_period": "0s",
@@ -340,25 +344,25 @@ def desired_role_payload() -> dict[str, Any]:
     }
 
 
-def validate_existing_role(role: dict[str, Any]) -> None:
-    desired = desired_role_payload()
+def validate_existing_role(role: dict[str, Any], *, policy_name: str = POLICY_NAME, role_name: str = ROLE_NAME) -> None:
+    desired = desired_role_payload(policy_name)
     role_policies = _policies(role.get("token_policies"))
     if role_policies != desired["token_policies"]:
-        raise ProvisionError("existing api-pii-envelope role has an unexpected policy set")
+        raise ProvisionError(f"existing {role_name} role has an unexpected policy set")
     if _duration_seconds(role.get("token_ttl")) != 300:
-        raise ProvisionError("existing api-pii-envelope role has an unexpected token TTL")
+        raise ProvisionError(f"existing {role_name} role has an unexpected token TTL")
     if _duration_seconds(role.get("token_max_ttl")) != 300:
-        raise ProvisionError("existing api-pii-envelope role has an unexpected token max TTL")
+        raise ProvisionError(f"existing {role_name} role has an unexpected token max TTL")
     if _duration_seconds(role.get("token_period")) != 0:
-        raise ProvisionError("existing api-pii-envelope role allows periodic tokens")
+        raise ProvisionError(f"existing {role_name} role allows periodic tokens")
     if role.get("token_no_default_policy") is not True:
-        raise ProvisionError("existing api-pii-envelope role allows the default policy")
+        raise ProvisionError(f"existing {role_name} role allows the default policy")
     if role.get("bind_secret_id") is not True:
-        raise ProvisionError("existing api-pii-envelope role does not bind SecretID")
+        raise ProvisionError(f"existing {role_name} role does not bind SecretID")
     if _duration_seconds(role.get("secret_id_ttl")) != 0:
-        raise ProvisionError("existing api-pii-envelope role has a non-persistent SecretID TTL")
+        raise ProvisionError(f"existing {role_name} role has a non-persistent SecretID TTL")
     if role.get("secret_id_num_uses") != 0:
-        raise ProvisionError("existing api-pii-envelope role limits SecretID uses")
+        raise ProvisionError(f"existing {role_name} role limits SecretID uses")
 
 
 def read_policy(path: Path) -> str:
