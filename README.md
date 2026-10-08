@@ -3,6 +3,61 @@
 로컬 개발에 필요한 상태 저장 서비스와 애플리케이션을 Docker Compose로 실행한다.
 애플리케이션은 각 저장소가 GHCR에 발행한 `:dev` 이미지를 사용한다.
 
+## 음성 설정 runtime8 전환 준비 — 2026-10-08
+
+운영 전환은 아직 실행하지 않았다. 현재 API·Worker는 contracts 7.20.0이며,
+Web의 새 `/voice-settings` 계약과 호환되지 않는다. API-only 교체, 선행 live
+migration, legacy terminal 상태의 raw SQL 변경 또는 owner fence 우회는 하지 않는다.
+
+- 점검 당시 API main `6c644d822027636d96017f36e515a513ec25dcad`의 격리 후보에서
+  `@types/pg@8.23.1`의 동일한 lockfile 중복 정의만 제거했다. Frozen install과
+  API·migrator 이미지 빌드가 성공했다. 이 수정은 이후 main의 `2d6285fa`에 반영됐다.
+  아래 이미지·복원 검증은 `6c644d82` 후보에만 해당하며, 후속 main의 승인 증거가 아니다.
+- 후보 API digest는 `sha256:4055de7650ff59e3b15919d4ae11e51f399309bd9388272508e9c73d21ec8269`,
+  migrator digest는 `sha256:e8322f752cc64a022a74c7fa87d7b3c8721f0ebed18cefd0b5116d37cc6f360a`다.
+  기존 승인 artifact가 이 새 후보를 자동으로 승인하지 않는다.
+- Fresh backup은 `data/backups/runtime-v8-db-20261008T054638Z/fresh-live.dump`다.
+  디렉터리0700·파일0600이며 exported read-only snapshot을 사용했다. Network-none,
+  tmpfs PostgreSQL17.11에 복원한 원래100개 테이블·4,886행의 fingerprint가 모두 같다.
+- 해당 후보의 canonical179개 중 pending13개를 복원 DB에 실제 적용했다. Pending0,
+  전체 migration history180개다. 원래167개 이력과 별도 `ToolKeyNamespace` 이력을
+  보존했다. 이전176개·pending10개 또는 후속 main에 이 결과를 그대로 적용하지 않는다.
+- 원래 recovery material과 실제 crypto 구현으로 복원 사용자5개의 이메일 복호화·
+  lookup hash 일치를 확인했다. 현재 배포된 `loadPiiKeyring`의 실제 AppRole 경로로
+  원래 userPii·emailLookup·phoneLookup 3DEK를 모두 unwrap했고 manifest 정체성도
+  전후 같다. 키·토큰·평문은 출력하거나 보존하지 않았다.
+- 같은 유효한 AppRole의 manifest GET은200이지만 KEK metadata와 KV metadata,
+  policy GET은403이다. `transit/keys/port-pii-kek` READ 권한을 가진 기존 승인
+  operator principal 없이는 KEK metadata 정체성·latest version을 증명할 수 없다.
+  원래 AppRole 권한 확대, generate-root, 키 재생성·회전·manifest 쓰기는 하지 않는다.
+- 정상 production bootstrap과 최종 metadata probe의 새 transient token cleanup은
+ 204였다. 첫 수동 probe는 CA buffer를 먼저 지워 cleanup이 실패했으며 해당 token의
+  개별 revoke·expiry를 확인하지 못했다. 관측한 동일 AppRole lease는300초이고
+  갱신 요청은 없다. 최초 token의 만료는 추론일 뿐 확정된 revoke 증거가 아니다.
+- Legacy47개는 모두 text-stream/agent다. 기존 conversation31개는 이미 ended,
+  usage27개는 finalized다. 미해제 admission·미정산 usage·reserved grant·진행 중
+  LLM 요청은0이다. Migration 뒤에도 active27·pending20은 그대로다.
+- 실제 배포된 `ConversationParticipantService.handleRoomFinished`와 실제 ORM
+  repository로 복원 DB의 owner 존재35개 종료와 재실행의 불변성을 확인했다.
+  나머지12개는 owner·conversation·usage·withdrawal request·erasure tombstone이
+  없어 `ACCOUNT_DELETION_FENCED`로 거부된다. 승인된 orphan-maintenance domain
+  경로 없이 삭제나 임의 상태 변경으로 drain 성공을 만들지 않는다.
+- 실제 LiveKit Cloud의 인증된 room census는0이다. 이는 native assignment,
+  worker quiescence, stale/refresh token revocation 또는 key rotation 증거가 아니다.
+  Cloud 관리 로그인·승인된 rotation 실행기·first-cutover 외부 artifact는 확보하지 못했다.
+- 현 API의 runtime-launcher registry는404이며 새 control key도 없다.
+  `runtime_fleet`의 registry/withdraw/drain 전제를 이 구버전에서 충족했다고 표시하지
+  않는다. Railway 전용 `runtime_provider`를 현재 Colima 운영의 증거로 대체하지 않는다.
+- 실제 API32·Worker19·Web47 Compose 체인은 render됐고 runtime env 차이는0이다.
+  DB의 과거 development override 경로는 없다. 다른 override로 조용히 대체하거나
+  기존 DB를 재생성하지 말고 fresh snapshot의 실제 image/env/mount/network를 보존한다.
+
+DB 상세 증거는 위 backup 디렉터리, Cloud 접근·승인 조건은
+`data/runtime-v8-speaker-20261008/cloud-readback-20261008T055210Z/`에 owner-only로
+보관한다. 실제 Cloud 관리 권한과 native/credential proof, orphan12의 정당한
+maintenance 권한, 전체 키·데이터 정체성과 적용 chain을 확보한 뒤에만
+API·Worker·DB 공동 전환과 실제 음성 설정 조회·저장을 검증한다.
+
 ## 의존성 보안 운영 배포 — 2026-10-07
 
 로컬 Mac/Colima Compose project `infra`의 현재 운영 버전에 보안 수정만 backport했다.
