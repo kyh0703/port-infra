@@ -264,6 +264,8 @@ services:
     image: ghcr.io/kyh0703/port-rag:dev
     restart: unless-stopped
     depends_on:
+      openbao:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       rag-migrator:
@@ -272,6 +274,18 @@ services:
       - ${RAG_ENV_FILE:-./config/rag.env.example}
     environment:
       INTERNAL_SERVER_KEY: ${INTERNAL_SERVER_KEY:?Set INTERNAL_SERVER_KEY in .env}
+      TMPDIR: /dev/shm
+      OPENBAO_ADDR: https://openbao:8200
+      OPENBAO_CA_CERT_FILE: /run/openbao-ca/ca.crt
+      OPENBAO_ROLE_ID_FILE: /run/openbao/rag-role-id
+      OPENBAO_SECRET_ID_FILE: /run/openbao/rag-secret-id
+    shm_size: 1gb
+    volumes:
+      - openbao_rag_credentials:/run/openbao:ro
+      - ./data/openbao/tls/ca.crt:/run/openbao-ca/ca.crt:ro
+    networks:
+      - default
+      - secrets_internal
     ports:
       - "${RAG_PORT:-8001}:8000"
     healthcheck:
@@ -479,6 +493,7 @@ volumes:
   openbao_data:
   openbao_audit:
   openbao_api_credentials:
+  openbao_rag_credentials:
   voice_preview_cache:
   adaptor_api_tls:
 
