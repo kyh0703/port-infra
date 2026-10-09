@@ -35,6 +35,24 @@ LLM, speech, tool을 실행하지 않는다. Room과 probe worker는 정리했�
 `liveUpAllowed:false`를 기록한다. Auth URL, key 값, JWT와 사용자 원본은
 이 문서나 tracked script에 넣지 않는다.
 
+## 실행하지 않은 Compose 후보
+
+실제 API32개·env2개, worker19개·env1개의 ordered labels를 읽어 후보를
+render했다. Baseline의 선언된 environment는 현재 컨테이너와 동일하다.
+후보의 변경은 API의 image·environment, worker의 image·environment·command·
+healthcheck뿐이다. 기존 volumes·ports·networks와 최신 Web 배포를 보존한다.
+
+Worker는 발행된 `6c9cc376` 불변 image와 baked inventory를 사용한다.
+`readRuntimeLauncherConfig`를 실제 image에서 실행해 target·inventory·model
+cache·key 길이·포트8000/8081/9091 검사가 통과했다. Worker를 등록하지 않았다.
+승인된 실제 project ID와 새 project key를 후보에 결속했고, 기존 API의 Redis
+endpoint를 새 parent에 명시했다. 과거 후보의 URL hostname을 project ID로
+사용하지 않는다.
+
+후보 파일은 owner-only이며 운영에 적용하지 않았다. Capability/first-cutover
+artifact와 공급자 교체·암호화 proof는 아직 결속하지 않았다. API main
+`4b6e538b`의 CI image 발행과 digest 확인도 최종 적용 전에 확인한다.
+
 ## 남은 필수 작업
 
 1. OpenAI Admin Key·OpenRouter Management Key 또는 실제 운영자의 새 키·폐기
