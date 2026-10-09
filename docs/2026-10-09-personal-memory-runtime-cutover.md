@@ -1,5 +1,9 @@
 # 개인 기억·최신 main Mac runtime 전환 준비
 
+2026-10-10 KST 운영 전환이 완료됐다. 현재 적용·검증·운영 유지 조건은
+[최종 운영 전환 기록](2026-10-10-personal-memory-runtime-rollout.md)을 따른다.
+아래 내용은 전환 전 관찰과 준비 상태다.
+
 기준일: 2026-10-09. 실제 대상은 Docker context `colima`, Compose project
 `infra`, PostgreSQL `port`다. 사용자는 전체 최신 main runtime을 선택했으며
 통합 준비 후 migration을 적용하도록 결정했다.

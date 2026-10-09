@@ -3,6 +3,15 @@
 로컬 개발에 필요한 상태 저장 서비스와 애플리케이션을 Docker Compose로 실행한다.
 애플리케이션은 각 저장소가 GHCR에 발행한 `:dev` 이미지를 사용한다.
 
+## 개인 자동기억·runtime8 운영 전환 완료 — 2026-10-10
+
+Mac/Colima의 실제 API는 `7942f817`, worker는 `6c9cc376`로 전환했다.
+DB168→182·pending0·legacy0, actual admission·readiness200과 memory GET/PATCH200·
+OpenBao ciphertext 저장·복호화를 확인했다. 원래 데이터·암호화 key·모델 호출 key는 유지했다.
+Image pin·backup·검증·재기동 chain·evidence 갱신은
+[실제 운영 전환 기록](docs/2026-10-10-personal-memory-runtime-rollout.md)을 따른다.
+아래 2026-10-08 준비 기록은 전환 전 관찰이다.
+
 ## 음성 설정 runtime8 전환 준비 — 2026-10-08
 
 운영 전환은 아직 실행하지 않았다. 현재 API·Worker는 contracts 7.20.0이며,
