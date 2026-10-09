@@ -50,8 +50,23 @@ endpoint를 새 parent에 명시했다. 과거 후보의 URL hostname을 project
 사용하지 않는다.
 
 후보 파일은 owner-only이며 운영에 적용하지 않았다. Capability/first-cutover
-artifact와 공급자 교체·암호화 proof는 아직 결속하지 않았다. API main
-`4b6e538b`의 CI image 발행과 digest 확인도 최종 적용 전에 확인한다.
+artifact와 공급자 교체·암호화 proof는 아직 결속하지 않았다.
+
+API main `4b6e538b`의 [CI](https://github.com/kyh0703/port-api/actions/runs/37929316239)는
+성공했다. 실제 arm64 API·migrator를 pull하고 OCI revision, compiled adapter·
+cipher·migration import와 canonical181개·Spec source·bundle hash를 대조했다.
+후보의 실제 `api-migrator`와 API의 DB URL은 현재 API의 것과 동일하다.
+
+| 역할 | 불변 GHCR digest |
+| --- | --- |
+| API | `sha256:d26a4afa0923feef40305f5a2d501f2b49589ceb6a1d47a40f10ca53b9365de8` |
+| api-migrator | `sha256:fe9fa8ad0bf65c597ebdb457811289e88a8881a3cd706b2ee9784beaca96befa` |
+| worker | `sha256:753dd449deb68a0fafa9a22e7e26858667dd38a34744a5d203f21ec366cf10e4` |
+
+Spec source는 `10d678b911110864364feb5db23a00156116e3ea`, API bundle SHA-256은
+`060076bec0f67b3d6cc3e902d685294ad3816292d2906ecec2101fec4868dbe9`다.
+현재 환경·프로젝트 env 파일·표준 operator token 파일에서도 필요한 관리 자격
+증명을 찾지 못했다. 공급자·OpenBao operator의 보호 파일 경로를 기다리고 있다.
 
 ## 남은 필수 작업
 
